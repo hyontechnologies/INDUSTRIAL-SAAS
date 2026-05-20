@@ -1,0 +1,23 @@
+{
+  "acls": [
+    // Edge nodes can access the cloud load balancer (Nginx) on port 80 and 443
+    {
+      "action": "accept",
+      "src": ["tag:edge"],
+      "dst": ["tag:cloud:80", "tag:cloud:443"]
+    },
+    // Admins can access everything (Edge IPCs for SSH, Cloud VMs for SSH)
+    {
+      "action": "accept",
+      "src": ["group:admin"],
+      "dst": ["*:*"]
+    }
+  ],
+  "tagOwners": {
+    "tag:cloud": ["group:admin"],
+    "tag:edge": ["group:admin"]
+  },
+  "groups": {
+    "group:admin": ["admin@piccadily.com"]
+  }
+}

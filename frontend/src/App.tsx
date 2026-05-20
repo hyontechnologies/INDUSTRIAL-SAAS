@@ -146,14 +146,18 @@ export default function App() {
   useEffect(() => {
     const fetchMetadata = async () => {
       try {
-        const response = await fetch(`/api/v1/tags?plant_id=${selectedPlant}`);
+        const response = await fetch(`/api/v1/tags?plant_id=${selectedPlant}`, {
+          headers: { 'X-API-Key': 'changeme' }
+        });
         if (response.ok) {
           const data = await response.json();
           // Convert array to record
           const record: Record<string, TagMetadata> = {};
-          data.forEach((tag: TagMetadata) => {
-            record[tag.tag_name] = tag;
-          });
+          if (data.tags) {
+            data.tags.forEach((tag: TagMetadata) => {
+              record[tag.tag_name] = tag;
+            });
+          }
           setTags(record);
         }
       } catch (err) {
@@ -170,7 +174,7 @@ export default function App() {
 
     const connectWS = () => {
       setConnectionStatus('connecting');
-      const wsUrl = `ws://${window.location.host}/api/v1/ws/live?tenant_id=piccadily&plant_id=${selectedPlant}`;
+      const wsUrl = `ws://${window.location.host}/api/v1/ws/piccadily/${selectedPlant}?api_key=changeme`;
       ws = new WebSocket(wsUrl);
 
       ws.onopen = () => {
@@ -454,9 +458,9 @@ export default function App() {
   // Acknowledge Alarm handler
   const acknowledgeAlarm = async (alarmId: string) => {
     try {
-      const response = await fetch('/api/v1/alarms/acknowledge', {
+      const response = await fetch('/api/v1/alarms/ack', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-API-Key': 'changeme' },
         body: JSON.stringify({
           alarm_id: alarmId,
           acked_by: 'Operator_App',
@@ -477,7 +481,7 @@ export default function App() {
     try {
       const response = await fetch('/api/v1/alarms/clear', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-API-Key': 'changeme' },
         body: JSON.stringify({
           plant_id: selectedPlant,
           alarm_ids: [alarmId],

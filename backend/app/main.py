@@ -19,6 +19,9 @@ from .broadcaster import ws_manager
 from .config import settings
 from .database import close_pool, create_pool, get_pool
 from .metrics import metrics
+from .stream_writer import init_redis_pool, close_redis_pool, redis_client
+from .stream_consumer import stream_consumer_worker
+from .alarm_consumer import alarm_consumer_worker
 
 # ── Structured logging setup ────────────────────────────────────────────────────
 structlog.configure(
@@ -49,6 +52,7 @@ async def lifespan(app: FastAPI):
     log.info("startup.begin", app=settings.APP_NAME, version=settings.APP_VERSION, env=settings.ENVIRONMENT)
 
     await create_pool()
+    await init_redis_pool()
     log.info("startup.db_pool_ready", min=settings.DB_POOL_MIN, max=settings.DB_POOL_MAX)
 
     # Schema integrity check
@@ -62,18 +66,31 @@ async def lifespan(app: FastAPI):
         else:
             log.info("startup.schema_ok", hypertables=ht_count)
 
+    # Note: v3 alarm sweep is replaced by the stream alarm consumer, but we keep it running for fallback
     sweep_task = asyncio.create_task(alarm_sweep_loop())
-    log.info("startup.alarm_sweep_started")
+
+    # Start Redis consumer workers
+    writer_tasks = [asyncio.create_task(stream_consumer_worker(i)) for i in range(settings.REDIS_CONSUMER_WORKERS)]
+    alarm_tasks = [asyncio.create_task(alarm_consumer_worker(i)) for i in range(settings.REDIS_ALARM_WORKERS)]
+    log.info("startup.workers_started", writers=len(writer_tasks), alarms=len(alarm_tasks))
+
+    await ws_manager.start_pubsub()
 
     yield  # ← application runs
 
     # Graceful drain
+    log.info("shutdown.draining_workers")
     sweep_task.cancel()
+    for task in writer_tasks + alarm_tasks:
+        task.cancel()
+
     try:
-        await asyncio.wait_for(sweep_task, timeout=5.0)
-    except (asyncio.CancelledError, asyncio.TimeoutError):
+        await asyncio.gather(sweep_task, *writer_tasks, *alarm_tasks, return_exceptions=True)
+    except Exception:
         pass
 
+    await ws_manager.stop_pubsub()
+    await close_redis_pool()
     await close_pool()
     log.info("shutdown.complete")
 
@@ -146,6 +163,7 @@ app.include_router(grafana.router)
 @app.get("/health", tags=["ops"], include_in_schema=False)
 async def health():
     db_ok = False
+    redis_ok = False
     db_ms = None
     try:
         t0 = time.perf_counter()
@@ -156,9 +174,18 @@ async def health():
         db_ok = True
     except Exception:
         pass
+
+    try:
+        if redis_client:
+            await redis_client.ping()
+            redis_ok = True
+    except Exception:
+        pass
+
     return {
-        "status": "ok" if db_ok else "degraded",
+        "status": "ok" if (db_ok and redis_ok) else "degraded",
         "db": db_ok,
+        "redis": redis_ok,
         "db_latency_ms": db_ms,
         "ws_connections": ws_manager.connection_count,
         "points_ingested": metrics.points_total,
@@ -179,12 +206,43 @@ async def ping():
     return {"pong": True, "ts": datetime.now(timezone.utc).isoformat()}
 
 
-# ── Global exception handler ───────────────────────────────────────────────────
-@app.exception_handler(Exception)
-async def global_exception_handler(request: Request, exc: Exception):
-    metrics.errors_total += 1
-    log.error("unhandled_exception", path=request.url.path, error=str(exc), exc_info=True)
-    return JSONResponse(status_code=500, content={"detail": "Internal server error"})
+# ── Serve Frontend SPA ────────────────────────────────────────────────────────
+import os
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+
+static_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "static"))
+
+if os.path.exists(static_dir):
+    log.info("startup.frontend_static_serving", path=static_dir)
+    # Mount `/assets` first if it exists, to leverage FastAPI's highly optimized static files engine for large bundles
+    assets_dir = os.path.join(static_dir, "assets")
+    if os.path.exists(assets_dir):
+        app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
+
+    # SPA wildcard catch-all route to serve the built frontend
+    @app.get("/{catchall:path}", include_in_schema=False)
+    async def serve_spa(catchall: str):
+        # Exclude backend namespaces explicitly to prevent circular loops
+        if catchall.startswith("api/") or catchall.startswith("ws/"):
+            return JSONResponse(status_code=404, content={"detail": "Not Found"})
+
+        file_path = os.path.join(static_dir, catchall)
+        if catchall and os.path.isfile(file_path):
+            return FileResponse(file_path)
+
+        # Serve index.html for client-side SPA routing fallbacks
+        index_path = os.path.join(static_dir, "index.html")
+        if os.path.exists(index_path):
+            return FileResponse(index_path)
+
+        return PlainTextResponse("Not Found", status_code=404)
+else:
+    log.warning(
+        "startup.frontend_static_not_found",
+        path=static_dir,
+        msg="Frontend static files folder not found. Running API-only mode.",
+    )
 
 
 # ── Entry point ─────────────────────────────────────────────────────────────────

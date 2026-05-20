@@ -8,7 +8,9 @@ from datetime import datetime
 import asyncpg
 from fastapi import APIRouter, Depends, Request
 
+from ..auth import Permission, require_permission
 from ..database import get_db
+from ..models import UserContext
 
 router = APIRouter(prefix="/grafana", tags=["grafana"], include_in_schema=False)
 
@@ -21,12 +23,14 @@ async def grafana_health():
 @router.post("/search")
 async def grafana_search(
     request: Request,
+    user: UserContext = Depends(require_permission(Permission.METADATA_READ)),
     conn: asyncpg.Connection = Depends(get_db),
 ):
     body = await request.json()
     target = body.get("target", "")
     rows = await conn.fetch(
-        "SELECT DISTINCT tag_name FROM tag_metadata WHERE tag_name ILIKE $1 LIMIT 200",
+        "SELECT DISTINCT tag_name FROM tag_metadata WHERE tenant_id=$1 AND tag_name ILIKE $2 LIMIT 200",
+        user.tenant_id,
         f"%{target}%",
     )
     return [r["tag_name"] for r in rows]
@@ -35,6 +39,7 @@ async def grafana_search(
 @router.post("/query")
 async def grafana_query(
     request: Request,
+    user: UserContext = Depends(require_permission(Permission.TELEMETRY_READ)),
     conn: asyncpg.Connection = Depends(get_db),
 ):
     """Grafana SimpleJSON time-series query using continuous aggregates."""
@@ -59,7 +64,8 @@ async def grafana_query(
         tag = t.get("target", "")
         rows = await conn.fetch(
             f"SELECT bucket AS ts, avg_val AS value FROM {source} "
-            f"WHERE tag_name=$1 AND bucket BETWEEN $2 AND $3 ORDER BY bucket LIMIT 2000",
+            f"WHERE tenant_id=$1 AND tag_name=$2 AND bucket BETWEEN $3 AND $4 ORDER BY bucket LIMIT 2000",
+            user.tenant_id,
             tag,
             start,
             end,

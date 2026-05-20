@@ -10,7 +10,7 @@ from typing import Optional
 import asyncpg
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from ..auth import audit, get_current_user, require_role
+from ..auth import Permission, audit, require_permission, require_plant_access
 from ..broadcaster import ws_manager
 from ..database import get_db
 from ..models import AlarmAckRequest, AlarmClearRequest, UserContext
@@ -22,7 +22,7 @@ router = APIRouter(prefix="/api/v1/alarms", tags=["alarms"])
 async def get_active_alarms(
     plant_id: Optional[str] = Query(None),
     severity: Optional[str] = Query(None),
-    user: UserContext = Depends(get_current_user),
+    user: UserContext = Depends(require_permission(Permission.ALARMS_READ)),
     conn: asyncpg.Connection = Depends(get_db),
 ):
     q = (
@@ -38,6 +38,10 @@ async def get_active_alarms(
         params.append(severity.upper())
         q += f" AND severity=${len(params)}"
     q += " ORDER BY occurred_at DESC LIMIT 200"
+    # If plant_id is provided, verify access
+    if plant_id and user.plant_ids and plant_id not in user.plant_ids:
+        raise HTTPException(403, f"Access denied to plant '{plant_id}'")
+
     rows = await conn.fetch(q, *params)
     return {"count": len(rows), "alarms": [dict(r) for r in rows]}
 
@@ -45,7 +49,7 @@ async def get_active_alarms(
 @router.post("/ack")
 async def acknowledge_alarm(
     req: AlarmAckRequest,
-    user: UserContext = Depends(require_role("admin", "engineer", "operator")),
+    user: UserContext = Depends(require_permission(Permission.ALARMS_ACK)),
     conn: asyncpg.Connection = Depends(get_db),
 ):
     # Fetch plant_id BEFORE update for correct WS routing
@@ -56,6 +60,9 @@ async def acknowledge_alarm(
     )
     if not alarm_row:
         raise HTTPException(404, "Alarm not found")
+
+    if user.plant_ids and alarm_row["plant_id"] not in user.plant_ids:
+        raise HTTPException(403, "Access denied to plant containing this alarm")
 
     result = await conn.execute(
         "UPDATE alarms SET alarm_state='ACKNOWLEDGED', acked_by=$1, acked_at=now() "
@@ -91,10 +98,13 @@ async def acknowledge_alarm(
 @router.post("/clear")
 async def clear_alarms(
     req: AlarmClearRequest,
-    user: UserContext = Depends(require_role("admin", "engineer", "operator")),
+    user: UserContext = Depends(require_permission(Permission.ALARMS_ACK)),
     conn: asyncpg.Connection = Depends(get_db),
 ):
     """Bulk-clear acknowledged alarms."""
+    if user.plant_ids and req.plant_id not in user.plant_ids:
+        raise HTTPException(403, "Access denied to plant")
+
     if req.alarm_ids:
         result = await conn.execute(
             "UPDATE alarms SET alarm_state='CLEARED' "
@@ -132,7 +142,7 @@ async def get_alarm_history(
     severity: Optional[str] = Query(None),
     state: Optional[str] = Query(None, description="ACTIVE | ACKNOWLEDGED | CLEARED"),
     limit: int = Query(500, le=5000),
-    user: UserContext = Depends(get_current_user),
+    user: UserContext = Depends(require_permission(Permission.ALARMS_READ)),
     conn: asyncpg.Connection = Depends(get_db),
 ):
     q = "SELECT * FROM alarms WHERE tenant_id=$1"
@@ -154,6 +164,10 @@ async def get_alarm_history(
         q += f" AND alarm_state=${len(params)}"
     params.append(limit)
     q += f" ORDER BY occurred_at DESC LIMIT ${len(params)}"
+    # Verify plant access
+    if plant_id and user.plant_ids and plant_id not in user.plant_ids:
+        raise HTTPException(403, f"Access denied to plant '{plant_id}'")
+
     rows = await conn.fetch(q, *params)
     return {"count": len(rows), "alarms": [dict(r) for r in rows]}
 
@@ -162,7 +176,8 @@ async def get_alarm_history(
 async def alarm_summary(
     plant_id: str = Query(...),
     hours: int = Query(24, ge=1, le=720),
-    user: UserContext = Depends(get_current_user),
+    user: UserContext = Depends(require_permission(Permission.ALARMS_READ)),
+    _=Depends(require_plant_access),
     conn: asyncpg.Connection = Depends(get_db),
 ):
     """Alarm count by severity for the last N hours — dashboard KPI tiles."""

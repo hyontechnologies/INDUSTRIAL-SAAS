@@ -44,15 +44,18 @@ services:
   # ── FastAPI Backend ─────────────────────────────────────────────
   fastapi:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: backend/Dockerfile
     container_name: piccadily-backend
     restart: unless-stopped
     depends_on:
       timescaledb:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     environment:
       DATABASE_URL:        "postgresql://historian_user:${DB_PASSWORD:-historian_dev_password}@timescaledb:5432/historian"
+      REDIS_URL:           "redis://redis:6379/0"
       SUPABASE_JWT_SECRET: ${SUPABASE_JWT_SECRET}
       SUPABASE_URL:        ${SUPABASE_URL}
       JWT_AUDIENCE:        authenticated
@@ -115,7 +118,7 @@ services:
     restart: unless-stopped
     ports:
       - "6379:6379"
-    command: redis-server --maxmemory 64mb --maxmemory-policy allkeys-lru
+    command: redis-server --maxmemory 128mb --maxmemory-policy allkeys-lru --appendonly yes
     deploy:
       resources:
         limits:

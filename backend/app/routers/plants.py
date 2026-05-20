@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 import asyncpg
 from fastapi import APIRouter, Depends, HTTPException
 
-from ..auth import audit, get_current_user, require_role
+from ..auth import Permission, audit, require_permission, require_plant_access
 from ..database import get_db
 from ..models import PlantCreate, UserContext
 
@@ -19,21 +19,30 @@ router = APIRouter(prefix="/api/v1/plants", tags=["plants"])
 
 @router.get("")
 async def list_plants(
-    user: UserContext = Depends(get_current_user),
+    user: UserContext = Depends(require_permission(Permission.METADATA_READ)),
     conn: asyncpg.Connection = Depends(get_db),
 ):
-    rows = await conn.fetch(
-        "SELECT plant_id, name, location, plant_type, timezone, is_active, created_at "
-        "FROM plants WHERE tenant_id=$1 ORDER BY name",
-        user.tenant_id,
-    )
+    if user.plant_ids:
+        rows = await conn.fetch(
+            "SELECT plant_id, name, location, plant_type, timezone, is_active, created_at "
+            "FROM plants WHERE tenant_id=$1 AND plant_id = ANY($2) ORDER BY name",
+            user.tenant_id,
+            user.plant_ids,
+        )
+    else:
+        rows = await conn.fetch(
+            "SELECT plant_id, name, location, plant_type, timezone, is_active, created_at "
+            "FROM plants WHERE tenant_id=$1 ORDER BY name",
+            user.tenant_id,
+        )
     return {"count": len(rows), "plants": [dict(r) for r in rows]}
 
 
 @router.get("/{plant_id}")
 async def get_plant(
     plant_id: str,
-    user: UserContext = Depends(get_current_user),
+    user: UserContext = Depends(require_permission(Permission.METADATA_READ)),
+    _=Depends(require_plant_access),
     conn: asyncpg.Connection = Depends(get_db),
 ):
     row = await conn.fetchrow(
@@ -50,7 +59,7 @@ async def get_plant(
 @router.post("", status_code=201)
 async def create_plant(
     payload: PlantCreate,
-    user: UserContext = Depends(require_role("admin")),
+    user: UserContext = Depends(require_permission(Permission.METADATA_WRITE)),
     conn: asyncpg.Connection = Depends(get_db),
 ):
     await conn.execute(
@@ -72,7 +81,8 @@ async def create_plant(
 @router.delete("/{plant_id}")
 async def deactivate_plant(
     plant_id: str,
-    user: UserContext = Depends(require_role("admin")),
+    user: UserContext = Depends(require_permission(Permission.METADATA_WRITE)),
+    _=Depends(require_plant_access),
     conn: asyncpg.Connection = Depends(get_db),
 ):
     """Soft-delete (sets is_active=false). Data is retained."""
@@ -90,7 +100,8 @@ async def deactivate_plant(
 @router.get("/{plant_id}/summary")
 async def plant_summary(
     plant_id: str,
-    user: UserContext = Depends(get_current_user),
+    user: UserContext = Depends(require_permission(Permission.TELEMETRY_READ)),
+    _=Depends(require_plant_access),
     conn: asyncpg.Connection = Depends(get_db),
 ):
     """Dashboard KPI summary — tag counts + alarm counts in one round-trip."""

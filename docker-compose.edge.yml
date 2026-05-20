@@ -1,0 +1,58 @@
+version: "3.8"
+
+services:
+  simulator:
+    build:
+      context: ./edge-agent
+      dockerfile: Dockerfile.edge
+    command: ["python", "simulator.py"]
+    ports:
+      - "4840:4840"
+    restart: unless-stopped
+    networks:
+      - edge_net
+
+  edge-agent:
+    build:
+      context: ./edge-agent
+      dockerfile: Dockerfile.edge
+    command: ["python", "edge_agent.py"]
+    environment:
+      - OPC_URL=opc.tcp://simulator:4840/piccadily/
+      - VITE_API_URL=${VITE_API_URL:-http://cloud-backend:80}
+      - EDGE_API_KEY_RAW=${EDGE_API_KEY_RAW:-changeme}
+      - TENANT_ID=piccadily
+      - PLANT_ID=BOILER_PLC_01
+      - DEVICE_ID=BOILER_PLC_01
+      - FLUSH_INTERVAL=2.0
+      - LOG_LEVEL=INFO
+    volumes:
+      - edge_data:/app/data
+    restart: unless-stopped
+    depends_on:
+      - simulator
+    network_mode: service:tailscale
+
+  tailscale:
+    image: tailscale/tailscale:latest
+    hostname: edge-agent-boiler-01
+    environment:
+      - TS_AUTHKEY=${TS_AUTHKEY:-}
+      - TS_STATE_DIR=/var/lib/tailscale
+      - TS_EXTRA_ARGS=--accept-routes
+    volumes:
+      - tailscale_data:/var/lib/tailscale
+      - /dev/net/tun:/dev/net/tun
+    cap_add:
+      - net_admin
+      - sys_module
+    restart: unless-stopped
+    networks:
+      - edge_net
+
+networks:
+  edge_net:
+
+volumes:
+  edge_data:
+  tailscale_data:

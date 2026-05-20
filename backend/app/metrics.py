@@ -39,6 +39,8 @@ class IngestionMetrics:
         self.batches_total: int = 0
         self.alarms_total: int = 0
         self.errors_total: int = 0
+        self.redis_batches_processed: int = 0
+        self.redis_messages_processed: int = 0
         self.started_at: float = time.monotonic()
         self._tenant_counts: Dict[str, int] = defaultdict(int)
 
@@ -69,6 +71,12 @@ class IngestionMetrics:
             "# HELP historian_ws_connections Current WebSocket connections",
             "# TYPE historian_ws_connections gauge",
             f"historian_ws_connections {ws_manager.connection_count}",
+            "# HELP historian_redis_batches_processed Total Redis stream batches processed",
+            "# TYPE historian_redis_batches_processed counter",
+            f"historian_redis_batches_processed {self.redis_batches_processed}",
+            "# HELP historian_redis_messages_processed Total Redis stream messages processed",
+            "# TYPE historian_redis_messages_processed counter",
+            f"historian_redis_messages_processed {self.redis_messages_processed}",
             "# HELP historian_uptime_seconds Application uptime in seconds",
             "# TYPE historian_uptime_seconds counter",
             f"historian_uptime_seconds {self.uptime_seconds}",
