@@ -17,6 +17,13 @@ log = structlog.get_logger("historian.stream_writer")
 redis_client: Redis = None  # type: ignore
 
 
+def get_stream_key(tenant_id: str, plant_id: str) -> str:
+    """Get the Redis stream key for a given tenant and plant."""
+    if not tenant_id or not plant_id:
+        raise ValueError("tenant_id and plant_id cannot be empty")
+    return f"telemetry:{tenant_id}:{plant_id}"
+
+
 async def init_redis_pool():
     """Initialize the global async Redis connection pool."""
     global redis_client

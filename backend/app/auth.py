@@ -6,6 +6,7 @@ RBAC role hierarchy with require_role() dependency factory.
 
 import hashlib
 from enum import Enum
+from functools import lru_cache
 from typing import Optional, Set
 
 import asyncpg
@@ -37,6 +38,7 @@ class Permission(str, Enum):
     # Admin
     ADMIN_USERS = "admin:users"
     ADMIN_API_KEYS = "admin:api_keys"
+    ADMIN_FULL = "admin:full"  # Needed for RBAC integration tests
 
 
 ROLE_PERMISSIONS: dict[str, Set[Permission]] = {
@@ -171,6 +173,7 @@ async def get_current_user(
     )
 
 
+@lru_cache()
 def require_permission(perm: Permission):
     """Dependency factory — raises HTTP 403 if user lacks required permission."""
 

@@ -16,7 +16,13 @@ from ..metrics import metrics
 from ..config import settings
 from ..models import ApiKeyCreate, UserContext
 
+from pydantic import BaseModel, Field
+
 router = APIRouter(prefix="/api/v1/admin", tags=["admin"])
+
+
+class TenantCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=128)
 
 
 @router.get("/tenants")
@@ -29,6 +35,30 @@ async def list_tenants(
         user.tenant_id,
     )
     return {"count": len(rows), "tenants": [dict(r) for r in rows]}
+
+
+@router.post("/tenants", status_code=201)
+async def create_tenant(
+    payload: TenantCreate,
+    user: UserContext = Depends(require_permission(Permission.ADMIN_FULL)),
+    conn: asyncpg.Connection = Depends(get_db),
+):
+    tenant_id = payload.name.lower().strip().replace(" ", "-")
+    tenant_id = "".join(c for c in tenant_id if c.isalnum() or c == "-")
+    if not tenant_id:
+        tenant_id = str(uuid.uuid4())[:8]
+
+    # Check if tenant already exists, if so append a short hash
+    exists = await conn.fetchval("SELECT 1 FROM tenants WHERE tenant_id = $1", tenant_id)
+    if exists:
+        tenant_id = f"{tenant_id}-{secrets.token_hex(4)}"
+
+    await conn.execute(
+        "INSERT INTO tenants (tenant_id, name) VALUES ($1, $2)",
+        tenant_id,
+        payload.name,
+    )
+    return {"tenant_id": tenant_id, "name": payload.name, "status": "created"}
 
 
 @router.get("/audit-log")

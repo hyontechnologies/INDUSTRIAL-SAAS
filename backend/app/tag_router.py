@@ -186,6 +186,8 @@ def get_table_for_group(group_name: str) -> str:
     Returns:
         Hypertable name e.g. 'telemetry_temperature'
     """
+    if group_name in VALID_HYPERTABLES:
+        return group_name
     table = f"telemetry_{group_name}"
     if table in VALID_HYPERTABLES:
         return table
@@ -195,3 +197,16 @@ def get_table_for_group(group_name: str) -> str:
 def clear_cache() -> None:
     """Clear the routing cache. Used in tests and after tag metadata updates."""
     _EXACT_MATCH.clear()
+
+
+class TagRouter:
+    """
+    Class wrapper for tag routing, matching the interface expected by backend routers.
+    """
+
+    def route_tag(self, tag_name: str, group: str | None = None) -> str:
+        if group:
+            table = get_table_for_group(group)
+            if table != CATCH_ALL_TABLE:
+                return table
+        return route_tag(tag_name)

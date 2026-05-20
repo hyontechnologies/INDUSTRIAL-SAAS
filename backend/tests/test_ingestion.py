@@ -24,17 +24,14 @@ async def test_ingest_telemetry_batch_success(mock_db_conn, mock_user):
 
     with (
         patch("app.ingestion.rate_limiter.check", return_value=True),
-        patch("app.ingestion.evaluate_alarms_for_batch", return_value=[]),
-        patch("app.ingestion.insert_alarms", return_value=None),
+        patch("app.ingestion.publish_batch_to_stream") as mock_publish,
     ):
         res = await ingest_telemetry_batch(mock_db_conn, batch, mock_user)
         assert res["inserted"] == 1
-        assert res["alarms"] == 0
+        assert res["status"] == "buffered_to_stream"
 
-        # Verify copy was called
-        mock_db_conn.copy_records_to_table.assert_called_once()
-        # Verify latest was upserted
-        mock_db_conn.executemany.assert_called_once()
+        # Verify publish was called
+        mock_publish.assert_called_once_with("piccadily", "BOILER_PLC_01", batch.points)
 
 
 @pytest.mark.asyncio
