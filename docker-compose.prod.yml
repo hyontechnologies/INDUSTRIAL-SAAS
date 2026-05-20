@@ -1,0 +1,84 @@
+##############################################################################
+# Piccadily Industrial Historian — Production Overrides
+# Usage: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+##############################################################################
+
+services:
+
+  timescaledb:
+    environment:
+      POSTGRES_PASSWORD: ${DB_PASSWORD}     # required — no default in prod
+    ports: []                                # not exposed externally
+    deploy:
+      resources:
+        limits:
+          memory: 1536M
+        reservations:
+          memory: 512M
+
+  fastapi:
+    image: ghcr.io/piccadily/historian-backend:${IMAGE_TAG:-latest}
+    build: {}                                 # disable build in prod
+    environment:
+      DATABASE_URL:          postgresql+asyncpg://historian_user:${DB_PASSWORD}@timescaledb:5432/historian
+      SUPABASE_JWT_SECRET:   ${SUPABASE_JWT_SECRET}
+      SUPABASE_URL:          ${SUPABASE_URL}
+      JWT_AUDIENCE:          authenticated
+      EDGE_API_KEYS:         ${EDGE_API_KEYS}
+      CORS_ORIGINS:          ${CORS_ORIGINS}
+      TRUSTED_HOSTS:         ${TRUSTED_HOSTS}
+      REDIS_URL:             redis://redis:6379/0
+      ENVIRONMENT:           production
+      DEBUG:                 "false"
+      DB_POOL_MIN:           "4"
+      DB_POOL_MAX:           "16"
+      TELEMETRY_BATCH_MAX:   "1000"
+      ALARM_COOLDOWN_SECONDS: "300"
+      ALARM_SWEEP_INTERVAL:  "10"
+      RATE_LIMIT_POINTS_PER_MIN: "10000"
+      STALE_TAG_MINUTES:     "10"
+    volumes: []                               # no code mounts in prod
+    ports: []                                 # internal only
+
+  frontend:
+    image: ghcr.io/piccadily/historian-frontend:${IMAGE_TAG:-latest}
+    build: {}
+    environment:
+      VITE_API_URL:           ${VITE_API_URL}
+      VITE_WS_URL:            ${VITE_WS_URL}
+      VITE_SUPABASE_URL:      ${VITE_SUPABASE_URL}
+      VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY}
+    volumes: []
+    ports: []
+
+  grafana:
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD:    ${GRAFANA_ADMIN_PASSWORD}
+      GF_SERVER_ROOT_URL:            ${GRAFANA_ROOT_URL:-https://historian.piccadily.com/grafana}
+      GF_SERVER_SERVE_FROM_SUB_PATH: "true"
+    ports: []                                 # internal only — accessed via nginx
+
+  redis:
+    command: >
+      redis-server
+        --maxmemory 96mb
+        --maxmemory-policy allkeys-lru
+        --appendonly no
+        --save ""
+        --requirepass ${REDIS_PASSWORD:-}
+    ports: []
+
+  nginx:
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - nginx_logs:/var/log/nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+        reservations:
+          memory: 32M

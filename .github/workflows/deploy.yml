@@ -1,0 +1,31 @@
+name: Piccadily Deploy
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      # Note: Set up SSH private key secret in your GitHub Repository:
+      # Secrets -> Actions -> Repository Secrets:
+      #   - AZURE_VM_HOST: <your_vm_ip>
+      #   - AZURE_VM_USER: <your_username>
+      #   - AZURE_SSH_KEY: <ssh_private_key_content>
+      - name: Deploy to Azure VM via SSH
+        uses: appleboy/ssh-action@v0.1.10
+        with:
+          host: ${{ secrets.AZURE_VM_HOST }}
+          username: ${{ secrets.AZURE_VM_USER }}
+          key: ${{ secrets.AZURE_SSH_KEY }}
+          port: 22
+          script: |
+            cd /app/Industrial-SAAS || git clone https://github.com/${{ github.repository }} /app/Industrial-SAAS && cd /app/Industrial-SAAS
+            git fetch --all
+            git reset --hard origin/main
+            docker compose -f docker-compose.yml down --remove-orphans
+            docker compose -f docker-compose.yml up -d --build
+            docker system prune -f

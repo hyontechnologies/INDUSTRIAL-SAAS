@@ -1,0 +1,38 @@
+# Ruff configuration file for Piccadily Industrial Historian
+
+line-length = 120
+target-version = "py311"
+
+[lint]
+# Enable standard Pyflakes (F) and Error (E/W) codes
+select = ["E", "F", "W"]
+
+# Ignore rules that conflict with custom env-loading patterns, legacy scripts, or style choices:
+# - E402: Module level import not at top of file (dotenv is loaded before other imports)
+# - E701: Multiple statements on one line (colon) (used in legacy test scripts)
+# - E702: Multiple statements on one line (semicolon)
+# - E501: Line too long (avoid warning on legacy Modbus mappings)
+# - F841: Local variable is assigned to but never used (avoid warning on simulator parameters)
+# - W291: Trailing whitespace
+# - W293: Blank line contains whitespace
+ignore = [
+    "E402",
+    "E701",
+    "E702",
+    "E501",
+    "F841",
+    "W291",
+    "W293",
+]
+
+# Exclude legacy monolithic files and directories from linting
+exclude = [
+    "main.py",
+    "piccadily_opc_edge_agent.py",
+    ".git",
+    "__pycache__",
+    "build",
+    "dist",
+    "node_modules",
+    "venv",
+]

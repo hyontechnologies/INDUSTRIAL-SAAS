@@ -1,0 +1,21 @@
+# Piccadily Industrial Historian — Grafana Datasource Provisioning
+apiVersion: 1
+
+datasources:
+  - name: TimescaleDB
+    type: postgres
+    access: proxy
+    url: timescaledb:5432
+    database: historian
+    user: grafana_reader
+    secureJsonData:
+      password: ${GRAFANA_READER_PW:-grafana_reader_dev}
+    jsonData:
+      sslmode: disable
+      maxOpenConns: 5
+      maxIdleConns: 2
+      connMaxLifetime: 14400
+      postgresVersion: 1500
+      timescaledb: true
+    isDefault: true
+    editable: false
