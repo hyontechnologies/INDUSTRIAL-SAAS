@@ -5,7 +5,8 @@ RBAC role hierarchy with require_role() dependency factory.
 """
 
 import hashlib
-from typing import Optional
+from enum import Enum
+from typing import Optional, Set
 
 import asyncpg
 import structlog
@@ -17,6 +18,52 @@ from .database import get_pool
 from .models import UserContext
 
 log = structlog.get_logger("historian.auth")
+
+
+class Permission(str, Enum):
+    # Telemetry
+    TELEMETRY_READ = "telemetry:read"
+    TELEMETRY_WRITE = "telemetry:write"  # Usually edge only
+
+    # Alarms
+    ALARMS_READ = "alarms:read"
+    ALARMS_ACK = "alarms:ack"
+    ALARMS_CONFIG = "alarms:config"
+
+    # Metadata (Tags/Plants)
+    METADATA_READ = "metadata:read"
+    METADATA_WRITE = "metadata:write"
+
+    # Admin
+    ADMIN_USERS = "admin:users"
+    ADMIN_API_KEYS = "admin:api_keys"
+
+
+ROLE_PERMISSIONS: dict[str, Set[Permission]] = {
+    "viewer": {
+        Permission.TELEMETRY_READ,
+        Permission.ALARMS_READ,
+        Permission.METADATA_READ,
+    },
+    "operator": {
+        Permission.TELEMETRY_READ,
+        Permission.ALARMS_READ,
+        Permission.ALARMS_ACK,
+        Permission.METADATA_READ,
+    },
+    "engineer": {
+        Permission.TELEMETRY_READ,
+        Permission.ALARMS_READ,
+        Permission.ALARMS_ACK,
+        Permission.ALARMS_CONFIG,
+        Permission.METADATA_READ,
+        Permission.METADATA_WRITE,
+    },
+    "admin": set(Permission),  # All permissions
+    "edge_agent": {
+        Permission.TELEMETRY_WRITE,
+    },
+}
 
 
 def _hash_api_key(raw_key: str) -> str:
@@ -110,6 +157,7 @@ async def get_current_user(
     user_meta = payload.get("user_metadata", {})
     tenant_id = meta.get("tenant_id") or user_meta.get("tenant_id")
     role = meta.get("role", "viewer")
+    plant_ids = meta.get("plant_ids", [])  # Empty list means all plants for this tenant
 
     if not tenant_id:
         raise HTTPException(status_code=403, detail="tenant_id missing from token")
@@ -119,21 +167,38 @@ async def get_current_user(
         tenant_id=tenant_id,
         email=payload.get("email", ""),
         role=role,
+        plant_ids=plant_ids,
     )
 
 
-def require_role(*allowed: str):
-    """Dependency factory — raises HTTP 403 if user.role not in allowed."""
+def require_permission(perm: Permission):
+    """Dependency factory — raises HTTP 403 if user lacks required permission."""
 
     async def _guard(user: UserContext = Depends(get_current_user)) -> UserContext:
-        if user.role not in allowed:
+        user_perms = ROLE_PERMISSIONS.get(user.role, set())
+        if perm not in user_perms:
             raise HTTPException(
                 status_code=403,
-                detail=f"Role '{user.role}' is not authorised. Required: {allowed}",
+                detail=f"Missing permission: {perm.value}. Current role '{user.role}' does not have this access.",
             )
         return user
 
     return _guard
+
+
+async def require_plant_access(plant_id: str, user: UserContext = Depends(get_current_user)) -> UserContext:
+    """
+    Dependency to verify user has access to a specific plant.
+    Reads plant_id from query params or path params.
+    """
+    if user.is_edge:
+        return user
+    if user.plant_ids and plant_id not in user.plant_ids:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Access denied to plant '{plant_id}'. Allowed plants: {user.plant_ids}",
+        )
+    return user
 
 
 async def audit(

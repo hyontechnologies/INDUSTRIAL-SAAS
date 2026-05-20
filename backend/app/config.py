@@ -13,10 +13,14 @@ class Settings(BaseSettings):
 
     # ── App ──────────────────────────────────────────────────────────────────
     APP_NAME: str = "Piccadily Industrial Historian"
-    APP_VERSION: str = "3.0.0"
+    APP_VERSION: str = "4.0.0"
     DEBUG: bool = False
     ENVIRONMENT: str = "production"
     TRUSTED_HOSTS: str = "*"  # comma-separated; "*" disables host check
+
+    @property
+    def is_development(self) -> bool:
+        return self.ENVIRONMENT.lower() == "development"
 
     # ── Database ─────────────────────────────────────────────────────────────
     DATABASE_URL: str  # asyncpg DSN
@@ -26,6 +30,20 @@ class Settings(BaseSettings):
     DB_COMMAND_TIMEOUT: float = 30.0
     DB_CONNECT_RETRIES: int = 10  # startup retry attempts
     DB_CONNECT_RETRY_DELAY: float = 3.0  # base delay (doubles each attempt)
+
+    # ── Redis (Streams + Pub/Sub) ────────────────────────────────────────────
+    REDIS_URL: str = "redis://localhost:6379/0"
+    REDIS_STREAM_PREFIX: str = "historian:telemetry:"
+    REDIS_STREAM_MAXLEN: int = 100000
+    REDIS_CONSUMER_BATCH_SIZE: int = 2000
+    REDIS_CONSUMER_WORKERS: int = 2
+    REDIS_ALARM_WORKERS: int = 1
+    REDIS_BLOCK_MS: int = 2000
+
+    # ── Tailscale ────────────────────────────────────────────────────────────
+    TAILSCALE_ENABLED: bool = False
+    TAILSCALE_CLOUD_HOSTNAME: str = "historian-cloud"
+    TAILSCALE_PLANT_HOSTNAME: str = "boiler-edge"
 
     # ── Supabase Auth ────────────────────────────────────────────────────────
     SUPABASE_JWT_SECRET: str

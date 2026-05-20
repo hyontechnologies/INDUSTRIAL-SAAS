@@ -1,0 +1,13 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+
+# Set default store DB location inside container
+ENV STORE_DB=/app/data/edge_store.db
+
+CMD ["python", "edge_agent.py"]

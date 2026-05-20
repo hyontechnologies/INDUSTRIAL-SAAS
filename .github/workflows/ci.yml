@@ -7,27 +7,88 @@ on:
     branches: [ main ]
 
 jobs:
-  backend-ci:
+  lint-backend:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-
+      - uses: actions/checkout@v4
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-          cache: 'pip'
+      - name: Install Ruff
+        run: pip install ruff
+      - name: Run Ruff Linter
+        run: ruff check backend/app
+      - name: Run Ruff Formatter check
+        run: ruff format --check backend/app
 
+  lint-isolation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Run Tenant Isolation Linter
+        run: python scripts/check_tenant_isolation.py
+
+  test-backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: timescale/timescaledb:latest-pg15
+        env:
+          POSTGRES_USER: historian_user
+          POSTGRES_PASSWORD: historian_dev_password
+          POSTGRES_DB: historian
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
           pip install -r backend/requirements.txt
-
-      - name: Code compilation check
+          pip install pytest pytest-asyncio httpx
+      - name: Initialize DB Schema
         run: |
-          python -m compileall backend/app/
-
+          # Use client to apply init script to postgres service
+          PGPASSWORD=historian_dev_password psql -h localhost -U historian_user -d historian -f timescaledb/init.sql
       - name: Run backend unit tests
         run: |
           cd backend
-          python -m pytest
+          python -m pytest -v
+        env:
+          DATABASE_URL: postgresql+asyncpg://historian_user:historian_dev_password@localhost:5432/historian
+          REDIS_URL: redis://localhost:6379/0
+          ENVIRONMENT: test
+
+  build-frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install dependencies
+        run: cd frontend && npm ci
+      - name: Build frontend
+        run: cd frontend && npm run build

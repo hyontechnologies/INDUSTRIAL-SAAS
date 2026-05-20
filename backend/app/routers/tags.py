@@ -7,7 +7,7 @@ import asyncpg
 from fastapi import APIRouter, Depends, Query
 
 from ..alarms import evict_threshold_cache
-from ..auth import audit, get_current_user, require_role
+from ..auth import Permission, audit, require_permission, require_plant_access
 from ..database import get_db
 from ..models import TagMetadataUpdate, UserContext
 
@@ -17,7 +17,8 @@ router = APIRouter(prefix="/api/v1/tags", tags=["tags"])
 @router.get("")
 async def list_tags(
     plant_id: str = Query(...),
-    user: UserContext = Depends(get_current_user),
+    user: UserContext = Depends(require_permission(Permission.METADATA_READ)),
+    _=Depends(require_plant_access),
     conn: asyncpg.Connection = Depends(get_db),
 ):
     rows = await conn.fetch(
@@ -36,7 +37,8 @@ async def search_tags(
     plant_id: str = Query(...),
     q: str = Query(..., min_length=1, description="Tag name / description substring"),
     limit: int = Query(50, le=200),
-    user: UserContext = Depends(get_current_user),
+    user: UserContext = Depends(require_permission(Permission.METADATA_READ)),
+    _=Depends(require_plant_access),
     conn: asyncpg.Connection = Depends(get_db),
 ):
     """Full-text search across tag_name and description."""
@@ -57,7 +59,8 @@ async def upsert_tag_metadata(
     tag_name: str,
     plant_id: str = Query(...),
     payload: TagMetadataUpdate = ...,
-    user: UserContext = Depends(require_role("admin", "engineer")),
+    user: UserContext = Depends(require_permission(Permission.METADATA_WRITE)),
+    _=Depends(require_plant_access),
     conn: asyncpg.Connection = Depends(get_db),
 ):
     await conn.execute(

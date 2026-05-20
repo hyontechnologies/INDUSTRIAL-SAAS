@@ -9,7 +9,7 @@ import uuid
 import asyncpg
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from ..auth import audit, require_role, _hash_api_key
+from ..auth import Permission, audit, require_permission, _hash_api_key
 from ..broadcaster import ws_manager
 from ..database import get_db
 from ..metrics import metrics
@@ -21,17 +21,20 @@ router = APIRouter(prefix="/api/v1/admin", tags=["admin"])
 
 @router.get("/tenants")
 async def list_tenants(
-    user: UserContext = Depends(require_role("admin")),
+    user: UserContext = Depends(require_permission(Permission.ADMIN_USERS)),
     conn: asyncpg.Connection = Depends(get_db),
 ):
-    rows = await conn.fetch("SELECT tenant_id, name, plan, is_active, created_at FROM tenants ORDER BY name")
+    rows = await conn.fetch(
+        "SELECT tenant_id, name, plan, is_active, created_at FROM tenants WHERE tenant_id=$1 ORDER BY name",
+        user.tenant_id,
+    )
     return {"count": len(rows), "tenants": [dict(r) for r in rows]}
 
 
 @router.get("/audit-log")
 async def get_audit_log(
     limit: int = Query(200, le=1000),
-    user: UserContext = Depends(require_role("admin")),
+    user: UserContext = Depends(require_permission(Permission.ADMIN_USERS)),
     conn: asyncpg.Connection = Depends(get_db),
 ):
     rows = await conn.fetch(
@@ -45,7 +48,7 @@ async def get_audit_log(
 
 @router.get("/ingestion-stats")
 async def ingestion_stats(
-    user: UserContext = Depends(require_role("admin")),
+    user: UserContext = Depends(require_permission(Permission.ADMIN_USERS)),
 ):
     """Live ingestion counters — no DB query needed."""
     return {
@@ -62,7 +65,7 @@ async def ingestion_stats(
 
 @router.get("/api-keys")
 async def list_api_keys(
-    user: UserContext = Depends(require_role("admin")),
+    user: UserContext = Depends(require_permission(Permission.ADMIN_API_KEYS)),
     conn: asyncpg.Connection = Depends(get_db),
 ):
     """List all API keys for the tenant (hashes only)."""
@@ -77,7 +80,7 @@ async def list_api_keys(
 @router.post("/api-keys", status_code=201)
 async def create_api_key(
     payload: ApiKeyCreate,
-    user: UserContext = Depends(require_role("admin")),
+    user: UserContext = Depends(require_permission(Permission.ADMIN_API_KEYS)),
     conn: asyncpg.Connection = Depends(get_db),
 ):
     """Provision a new API key for an edge agent. Returns raw key ONCE."""
@@ -88,12 +91,10 @@ async def create_api_key(
         "INSERT INTO api_keys (key_id, label, tenant_id, key_hash) VALUES ($1,$2,$3,$4)",
         key_id,
         payload.label,
-        payload.tenant_id,
+        user.tenant_id,  # Force tenant_id from user context, not payload
         key_hash,
     )
-    await audit(
-        conn, user, "CREATE_API_KEY", f"api_keys/{key_id}", {"label": payload.label, "tenant": payload.tenant_id}
-    )
+    await audit(conn, user, "CREATE_API_KEY", f"api_keys/{key_id}", {"label": payload.label, "tenant": user.tenant_id})
     return {
         "ok": True,
         "key_id": key_id,
@@ -106,7 +107,7 @@ async def create_api_key(
 @router.delete("/api-keys/{key_id}")
 async def revoke_api_key(
     key_id: str,
-    user: UserContext = Depends(require_role("admin")),
+    user: UserContext = Depends(require_permission(Permission.ADMIN_API_KEYS)),
     conn: asyncpg.Connection = Depends(get_db),
 ):
     result = await conn.execute(

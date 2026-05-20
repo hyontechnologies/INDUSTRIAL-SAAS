@@ -35,6 +35,7 @@ class AlarmState(str, Enum):
 class TelemetryPoint(BaseModel):
     tag_name: str = Field(..., max_length=128)
     value: float
+    bool_value: Optional[bool] = None
     quality: TagQuality = TagQuality.GOOD
     timestamp: Optional[datetime] = None  # UTC; None → server now
     unit: Optional[str] = None
@@ -131,3 +132,4 @@ class UserContext(BaseModel):
     email: str
     role: str  # admin | engineer | operator | viewer | edge_agent
     is_edge: bool = False
+    plant_ids: List[str] = Field(default_factory=list)  # Allowed plant IDs for this user (empty = all for tenant)

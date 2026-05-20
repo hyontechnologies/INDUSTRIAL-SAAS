@@ -12,7 +12,7 @@ from ..auth import _decode_supabase_jwt, _verify_edge_api_key_db
 from ..broadcaster import ws_manager
 from ..database import get_pool
 
-router = APIRouter(tags=["websocket"])
+router = APIRouter(prefix="/api/v1", tags=["websocket"])
 
 
 @router.websocket("/ws/{tenant_id}/{plant_id}")
@@ -40,9 +40,18 @@ async def websocket_stream(
         try:
             payload = _decode_supabase_jwt(token)
             meta = payload.get("app_metadata", {})
-            if meta.get("tenant_id") != tenant_id:
+            user_meta = payload.get("user_metadata", {})
+            t_id = meta.get("tenant_id") or user_meta.get("tenant_id")
+
+            if t_id != tenant_id:
                 await websocket.close(code=4403)
                 return
+
+            plant_ids = meta.get("plant_ids", [])
+            if plant_ids and plant_id not in plant_ids:
+                await websocket.close(code=4403, reason="Access denied to plant")
+                return
+
         except Exception:
             await websocket.close(code=4401)
             return

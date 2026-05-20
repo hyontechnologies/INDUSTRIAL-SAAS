@@ -12,7 +12,8 @@ import os
 import signal
 import sys
 import time
-import sqlite3
+import json
+import aiosqlite
 import dotenv
 
 # Load environment from root folder
@@ -48,9 +49,9 @@ BASE_RETRY = float(os.getenv("BASE_RETRY", "2.0"))
 MAX_RETRY = float(os.getenv("MAX_RETRY", "60.0"))
 DEDUP_WINDOW_S = float(os.getenv("DEDUP_WINDOW_S", "0.5"))
 
-# SQLite cursor storage
-_default_cursor = os.path.join(os.path.dirname(os.path.abspath(__file__)), "edge_cursor.db")
-CURSOR_DB = os.getenv("CURSOR_DB", _default_cursor)
+# SQLite storage
+_default_db = os.path.join(os.path.dirname(os.path.abspath(__file__)), "edge_store.db")
+STORE_DB = os.getenv("STORE_DB", _default_db)
 
 # ── Logging ─────────────────────────────────────────────────────────────────
 _LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
@@ -102,27 +103,31 @@ class DedupWindow:
         return False
 
 
-class CursorDB:
-    def __init__(self, path: str):
-        parent = os.path.dirname(path)
-        if parent:
-            os.makedirs(parent, exist_ok=True)
-        self._conn = sqlite3.connect(path, check_same_thread=False)
-        self._conn.execute("CREATE TABLE IF NOT EXISTS cursor (key TEXT PRIMARY KEY, seq INTEGER)")
-        self._conn.commit()
+async def init_db(path: str):
+    """Initialize the SQLite database with WAL mode for concurrency."""
+    parent = os.path.dirname(path)
+    if parent:
+        os.makedirs(parent, exist_ok=True)
 
-    def get(self, key: str = "main") -> int:
-        row = self._conn.execute("SELECT seq FROM cursor WHERE key=?", (key,)).fetchone()
-        return row[0] if row else 0
-
-    def set(self, seq: int, key: str = "main"):
-        self._conn.execute("INSERT OR REPLACE INTO cursor(key, seq) VALUES(?,?)", (key, seq))
-        self._conn.commit()
+    async with aiosqlite.connect(path) as db:
+        await db.execute("PRAGMA journal_mode=WAL")
+        await db.execute("PRAGMA synchronous=NORMAL")
+        await db.execute(
+            """
+            CREATE TABLE IF NOT EXISTS telemetry_queue (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                payload TEXT NOT NULL
+            )
+            """
+        )
+        await db.commit()
 
 
 class BoilerSubHandler(_BaseHandler):
-    def __init__(self, queue: asyncio.Queue, dedup: DedupWindow, node_meta: Dict[str, tuple], seq_counter: list):
-        self._q = queue
+    def __init__(
+        self, db_conn: aiosqlite.Connection, dedup: DedupWindow, node_meta: Dict[str, tuple], seq_counter: list
+    ):
+        self._db = db_conn
         self._dedup = dedup
         self._meta = node_meta
         self._seq = seq_counter
@@ -181,17 +186,20 @@ class BoilerSubHandler(_BaseHandler):
                 seq=self._seq[0],
             )
 
-            if self._q.full():
-                try:
-                    self._q.get_nowait()
-                    log.warning("Queue full — dropped oldest point to make room")
-                except asyncio.QueueEmpty:
-                    pass
-
-            self._q.put_nowait(point)
+            # SQLite writes must be scheduled as background tasks to avoid blocking OPC thread
+            # Actually asyncua allows calling async functions from datachange using create_task
+            payload_str = json.dumps(point.to_api_dict())
+            asyncio.create_task(self._async_insert(payload_str))
 
         except Exception as exc:
             log.error("SubHandler error: %s", exc, exc_info=True)
+
+    async def _async_insert(self, payload: str):
+        try:
+            await self._db.execute("INSERT INTO telemetry_queue (payload) VALUES (?)", (payload,))
+            await self._db.commit()
+        except Exception as exc:
+            log.error("Queue insert error: %s", exc)
 
     def status_change_notification(self, status):
         log.warning("OPC subscription status changed: %s", status)
@@ -238,68 +246,60 @@ async def discover_tags(client: Client, ns_idx: int) -> List[Tuple[Any, str, str
 
 
 async def uploader_task(
-    queue: asyncio.Queue,
-    cursor: CursorDB,
+    db_path: str,
     stop_event: asyncio.Event,
 ):
     retry_delay = BASE_RETRY
-    last_flush = time.monotonic()
 
     async with aiohttp.ClientSession(
         headers={"X-API-Key": API_KEY, "Content-Type": "application/json"},
         timeout=aiohttp.ClientTimeout(total=10),
     ) as session:
-        while not stop_event.is_set():
-            batch: List[TelemetryPoint] = []
-            deadline = last_flush + FLUSH_INTERVAL
-
-            while len(batch) < MAX_BATCH:
-                remaining = deadline - time.monotonic()
-                if remaining <= 0:
-                    break
+        async with aiosqlite.connect(db_path) as db:
+            while not stop_event.is_set():
                 try:
-                    point = await asyncio.wait_for(queue.get(), timeout=max(remaining, 0.05))
-                    batch.append(point)
-                except asyncio.TimeoutError:
-                    break
+                    async with db.execute(
+                        "SELECT id, payload FROM telemetry_queue ORDER BY id ASC LIMIT ?", (MAX_BATCH,)
+                    ) as cursor:
+                        rows = await cursor.fetchall()
 
-            if not batch:
-                await asyncio.sleep(0.05)
-                continue
+                    if not rows:
+                        await asyncio.sleep(FLUSH_INTERVAL)
+                        continue
 
-            payload = {
-                "tenant_id": TENANT_ID,
-                "plant_id": PLANT_ID,
-                "points": [p.to_api_dict() for p in batch],
-            }
+                    batch_payloads = [json.loads(row[1]) for row in rows]
+                    last_id = rows[-1][0]
 
-            try:
-                async with session.post(API_URL, json=payload) as resp:
-                    if resp.status in (200, 201, 202):
-                        last_seq = batch[-1].seq
-                        cursor.set(last_seq)
-                        log.info("Uploaded %d points (seq=%d)", len(batch), last_seq)
-                        retry_delay = BASE_RETRY
-                    else:
-                        body = await resp.text()
-                        log.error("API error %d: %s", resp.status, body[:200])
-                        for p in batch:
-                            await queue.put(p)
+                    payload = {
+                        "tenant_id": TENANT_ID,
+                        "plant_id": PLANT_ID,
+                        "points": batch_payloads,
+                    }
+
+                    try:
+                        async with session.post(API_URL, json=payload) as resp:
+                            if resp.status in (200, 201, 202):
+                                await db.execute("DELETE FROM telemetry_queue WHERE id <= ?", (last_id,))
+                                await db.commit()
+                                log.info("Uploaded %d points (up to queue_id=%d)", len(batch_payloads), last_id)
+                                retry_delay = BASE_RETRY
+                            else:
+                                body = await resp.text()
+                                log.error("API error %d: %s", resp.status, body[:200])
+                                await asyncio.sleep(retry_delay)
+                                retry_delay = min(retry_delay * 2, MAX_RETRY)
+                    except (aiohttp.ClientError, asyncio.TimeoutError) as exc:
+                        log.warning("Upload failed (%s) — retry in %.1fs", exc, retry_delay)
                         await asyncio.sleep(retry_delay)
                         retry_delay = min(retry_delay * 2, MAX_RETRY)
 
-            except (aiohttp.ClientError, asyncio.TimeoutError) as exc:
-                log.warning("Upload failed (%s) — retry in %.1fs", exc, retry_delay)
-                for p in batch:
-                    await queue.put(p)
-                await asyncio.sleep(retry_delay)
-                retry_delay = min(retry_delay * 2, MAX_RETRY)
-
-            last_flush = time.monotonic()
+                except Exception as exc:
+                    log.error("Uploader queue error: %s", exc)
+                    await asyncio.sleep(retry_delay)
 
 
 async def opc_client_task(
-    queue: asyncio.Queue,
+    db_path: str,
     stop_event: asyncio.Event,
 ):
     dedup = DedupWindow(DEDUP_WINDOW_S)
@@ -341,8 +341,9 @@ async def opc_client_task(
                 for g, c in sorted(groups.items()):
                     log.info("  Group %-20s : %3d tags", g, c)
 
-                handler = BoilerSubHandler(queue, dedup, node_meta, seq_ctr)
-                sub = await client.create_subscription(PUB_INTERVAL_MS, handler)
+                async with aiosqlite.connect(db_path) as db:
+                    handler = BoilerSubHandler(db, dedup, node_meta, seq_ctr)
+                    sub = await client.create_subscription(PUB_INTERVAL_MS, handler)
 
                 # Subscribe in chunks of 50 to avoid network timeouts
                 CHUNK = 50
@@ -358,11 +359,10 @@ async def opc_client_task(
                     await asyncio.sleep(30.0)
                     good, bad, dup = handler.get_stats()
                     log.info(
-                        "STATS | Good=%d | Bad=%d | Dedup=%d | QueueDepth=%d | Seq=%d",
+                        "STATS | Good=%d | Bad=%d | Dedup=%d | Seq=%d",
                         good,
                         bad,
                         dup,
-                        queue.qsize(),
                         seq_ctr[0],
                     )
 
@@ -384,14 +384,11 @@ async def main():
     log.info("  Namespace   : %s", OPC_NS_URI)
     log.info("  Cloud API   : %s", API_URL)
     log.info("  Batch/Flush : %d / %.1fs", MAX_BATCH, FLUSH_INTERVAL)
-    log.info("  Cursor DB   : %s", CURSOR_DB)
+    log.info("  Store DB    : %s", STORE_DB)
     log.info("=" * 60)
 
-    queue = asyncio.Queue(maxsize=100_000)
+    await init_db(STORE_DB)
     stop_event = asyncio.Event()
-    cursor = CursorDB(CURSOR_DB)
-
-    log.info("Resuming from cursor seq=%d", cursor.get())
 
     def _shutdown():
         log.info("Shutdown signal received")
@@ -405,8 +402,8 @@ async def main():
             pass  # Windows fallback
 
     await asyncio.gather(
-        opc_client_task(queue, stop_event),
-        uploader_task(queue, cursor, stop_event),
+        opc_client_task(STORE_DB, stop_event),
+        uploader_task(STORE_DB, stop_event),
     )
 
 

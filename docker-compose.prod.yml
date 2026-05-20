@@ -17,7 +17,7 @@ services:
           memory: 512M
 
   fastapi:
-    image: ghcr.io/piccadily/historian-backend:${IMAGE_TAG:-latest}
+    image: ${REGISTRY:-ghcr.io}/${IMAGE_NAME:-hyontechnologies/industrial-telemetry-platform-init}-unified:${IMAGE_TAG:-latest}
     build: {}                                 # disable build in prod
     environment:
       DATABASE_URL:          postgresql+asyncpg://historian_user:${DB_PASSWORD}@timescaledb:5432/historian
@@ -39,17 +39,6 @@ services:
       STALE_TAG_MINUTES:     "10"
     volumes: []                               # no code mounts in prod
     ports: []                                 # internal only
-
-  frontend:
-    image: ghcr.io/piccadily/historian-frontend:${IMAGE_TAG:-latest}
-    build: {}
-    environment:
-      VITE_API_URL:           ${VITE_API_URL}
-      VITE_WS_URL:            ${VITE_WS_URL}
-      VITE_SUPABASE_URL:      ${VITE_SUPABASE_URL}
-      VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY}
-    volumes: []
-    ports: []
 
   grafana:
     environment:
@@ -82,3 +71,26 @@ services:
           memory: 64M
         reservations:
           memory: 32M
+
+  tailscale:
+    image: tailscale/tailscale:latest
+    hostname: historian-cloud-prod
+    environment:
+      - TS_AUTHKEY=${TS_AUTHKEY:-}
+      - TS_STATE_DIR=/var/lib/tailscale
+      - TS_EXTRA_ARGS=--accept-routes
+    volumes:
+      - tailscale_data:/var/lib/tailscale
+      - /dev/net/tun:/dev/net/tun
+    cap_add:
+      - net_admin
+      - sys_module
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+
+volumes:
+  nginx_logs:
+  tailscale_data:

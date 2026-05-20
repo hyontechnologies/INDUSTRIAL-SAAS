@@ -1,0 +1,9 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+RUN pip install --no-cache-dir asyncpg python-dotenv
+
+COPY scripts/seed_dev_data.py .
+
+CMD ["python", "seed_dev_data.py"]
