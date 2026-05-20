@@ -23,7 +23,7 @@ class Settings(BaseSettings):
         return self.ENVIRONMENT.lower() == "development"
 
     # ── Database ─────────────────────────────────────────────────────────────
-    DATABASE_URL: str  # asyncpg DSN
+    DATABASE_URL: str = "postgresql://historian_user:historian_dev_password@localhost:5432/historian"
     DB_POOL_MIN: int = 2
     DB_POOL_MAX: int = 8  # keep low on 4 GB RAM
     DB_POOL_MAX_INACTIVE: float = 300.0
@@ -46,8 +46,8 @@ class Settings(BaseSettings):
     TAILSCALE_PLANT_HOSTNAME: str = "boiler-edge"
 
     # ── Supabase Auth ────────────────────────────────────────────────────────
-    SUPABASE_JWT_SECRET: str
-    SUPABASE_URL: str
+    SUPABASE_JWT_SECRET: str = "supabase_test_jwt_secret_placeholder_for_ci"
+    SUPABASE_URL: str = "https://supabase-placeholder-project-url.supabase.co"
     JWT_ALGORITHM: str = "HS256"
     JWT_AUDIENCE: str = "authenticated"
 
