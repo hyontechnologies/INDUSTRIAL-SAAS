@@ -11,7 +11,7 @@ from typing import Dict, List, Any
 import structlog
 
 from .config import settings
-from .database import get_pool
+from .database import get_write_pool
 from .stream_writer import redis_client
 from .models import TelemetryPoint, TagQuality
 from .alarms import evaluate_alarms_for_batch, insert_alarms
@@ -73,7 +73,7 @@ async def process_alarms(batch_data: List[Dict[str, Any]]):
         except (ValueError, TypeError):
             continue
 
-    pool = get_pool()
+    pool = get_write_pool()
     async with pool.acquire() as conn:
         all_alarms = []
         for (tid, pid), pts in groups.items():

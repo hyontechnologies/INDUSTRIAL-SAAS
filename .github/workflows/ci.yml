@@ -71,7 +71,7 @@ jobs:
       - name: Initialize DB Schema
         run: |
           # Use client to apply init script to postgres service
-          PGPASSWORD=historian_dev_password psql -h localhost -U historian_user -d historian -f timescaledb/init.sql
+          PGPASSWORD=historian_dev_password psql -h localhost -U historian_user -d historian -f timescaledb/V1__init.sql
       - name: Run backend unit tests
         run: |
           cd backend

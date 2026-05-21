@@ -1,4 +1,4 @@
-# Piccadily Industrial Historian + Digital Twin Platform (v4.0.0)
+# Piccadily Industrial Historian (v4.0.0)
 
 [![CI Pipeline](https://github.com/hyontechnologies/industrial-telemetry-platform-init/actions/workflows/ci.yml/badge.svg)](https://github.com/hyontechnologies/industrial-telemetry-platform-init/actions/workflows/ci.yml)
 [![Docker Registry](https://img.shields.io/badge/Container%20Registry-GHCR-blue)](https://ghcr.io)

@@ -39,7 +39,7 @@ async def ingest_telemetry_batch(
     if not user.is_edge and user.tenant_id != batch.tenant_id:
         raise HTTPException(status_code=403, detail="Tenant mismatch")
 
-    if not rate_limiter.check(batch.tenant_id, len(batch.points)):
+    if not await rate_limiter.check(batch.tenant_id, len(batch.points)):
         raise HTTPException(
             status_code=429,
             detail=f"Rate limit exceeded: >{settings.RATE_LIMIT_POINTS_PER_MIN} points/min",

@@ -4,9 +4,7 @@ DB-driven threshold evaluation with deadband, cooldown suppression, and threshol
 Background alarm sweep for periodic checking against telemetry_latest.
 """
 
-import asyncio
 import uuid
-from collections import defaultdict
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Tuple
 
@@ -53,12 +51,15 @@ async def _get_thresholds(
     tag_name: str,
 ) -> Optional[dict]:
     """Fetch alarm thresholds from DB (cached for ALARM_CACHE_TTL seconds)."""
-    import time
+    import json
+    from .stream_writer import redis_client
 
-    key = (tenant_id, plant_id, tag_name)
-    cached = _threshold_cache.get(key)
-    if cached and (time.time() - cached["_fetched_at"]) < settings.ALARM_CACHE_TTL:
-        return cached
+    key = f"threshold:cache:{tenant_id}:{plant_id}:{tag_name}"
+
+    if redis_client:
+        cached = await redis_client.get(key)
+        if cached:
+            return json.loads(cached)
 
     row = await conn.fetchrow(
         """
@@ -74,29 +75,29 @@ async def _get_thresholds(
 
     if row:
         data = dict(row)
-        data["_fetched_at"] = time.time()
-        _threshold_cache[key] = data
+        if redis_client:
+            await redis_client.set(key, json.dumps(data), ex=settings.ALARM_CACHE_TTL)
         return data
 
     # Fallback from hardcoded map
     fb = _FALLBACK_THRESHOLDS.get(tag_name)
     if fb:
-        result = {**fb, "_fetched_at": time.time()}
-        _threshold_cache[key] = result
-        return result
+        if redis_client:
+            await redis_client.set(key, json.dumps(fb), ex=settings.ALARM_CACHE_TTL)
+        return fb
     return None
 
 
-def _check_cooldown(tenant_id: str, plant_id: str, tag_name: str, severity: str) -> bool:
+async def _check_cooldown(tenant_id: str, plant_id: str, tag_name: str, severity: str) -> bool:
     """Returns True if alarm can fire (cooldown expired). False = suppressed."""
-    import time
+    from .stream_writer import redis_client
 
-    key = (tenant_id, plant_id, tag_name, severity)
-    last = _cooldown_tracker.get(key, 0)
-    if time.time() - last < settings.ALARM_COOLDOWN_SECONDS:
-        return False
-    _cooldown_tracker[key] = time.time()
-    return True
+    if not redis_client:
+        return True
+
+    cooldown_key = f"alarm:cooldown:{tenant_id}:{plant_id}:{tag_name}:{severity}"
+    is_set = await redis_client.set(cooldown_key, "1", ex=settings.ALARM_COOLDOWN_SECONDS, nx=True)
+    return bool(is_set)
 
 
 async def evaluate_alarms_for_batch(
@@ -141,17 +142,20 @@ async def evaluate_alarms_for_batch(
             checks.append((AlarmSeverity.ALARM, f"Lo alarm: {pt.tag_name}={val:.2f} <= {lo}"))
 
         for severity, message in checks:
-            if _check_cooldown(tenant_id, plant_id, pt.tag_name, severity.value):
+            if await _check_cooldown(tenant_id, plant_id, pt.tag_name, severity.value):
+                occurred_at = pt.timestamp or datetime.now(timezone.utc)
+                alarm_id_str = f"{tenant_id}:{plant_id}:{pt.tag_name}:{severity.value}:{occurred_at.isoformat()}"
+                alarm_id = str(uuid.uuid5(uuid.NAMESPACE_OID, alarm_id_str))
                 alarms.append(
                     {
-                        "alarm_id": str(uuid.uuid4()),
+                        "alarm_id": alarm_id,
                         "tenant_id": tenant_id,
                         "plant_id": plant_id,
                         "tag_name": pt.tag_name,
                         "severity": severity.value,
                         "message": message,
                         "trigger_value": round(val, 4),
-                        "occurred_at": pt.timestamp or datetime.now(timezone.utc),
+                        "occurred_at": occurred_at,
                     }
                 )
 
@@ -186,65 +190,10 @@ async def insert_alarms(conn: asyncpg.Connection, alarms: List[dict]) -> None:
     )
 
 
-async def alarm_sweep_loop() -> None:
-    """
-    Background task: sweeps telemetry_latest against tag_metadata thresholds.
-    v3.0 BUGFIX: groups synthetic points from rows directly.
-    """
-    from .database import get_pool
-
-    await asyncio.sleep(12)  # Give pool time to initialize
-    log.info("alarm_sweep.started", interval=settings.ALARM_SWEEP_INTERVAL)
-
-    while True:
-        try:
-            pool = get_pool()
-            async with pool.acquire() as conn:
-                rows = await conn.fetch(
-                    """
-                    SELECT l.tenant_id, l.plant_id, l.tag_name, l.value, l.quality,
-                           l.ts, l.unit
-                    FROM telemetry_latest l
-                    JOIN tag_metadata m
-                      ON l.tenant_id=m.tenant_id
-                     AND l.plant_id=m.plant_id
-                     AND l.tag_name=m.tag_name
-                    WHERE m.is_active=true
-                      AND (m.high_limit IS NOT NULL OR m.low_limit IS NOT NULL)
-                    """
-                )
-
-                groups: Dict[Tuple[str, str], List[TelemetryPoint]] = defaultdict(list)
-                for r in rows:
-                    try:
-                        pt = TelemetryPoint(
-                            tag_name=r["tag_name"],
-                            value=r["value"],
-                            quality=TagQuality(r["quality"]),
-                            timestamp=r["ts"],
-                            unit=r["unit"],
-                        )
-                        groups[(r["tenant_id"], r["plant_id"])].append(pt)
-                    except Exception:
-                        pass  # skip malformed rows
-
-                all_alarms: List[dict] = []
-                for (tid, pid), pts in groups.items():
-                    sweep_alarms = await evaluate_alarms_for_batch(conn, tid, pid, pts)
-                    all_alarms.extend(sweep_alarms)
-
-                if all_alarms:
-                    await insert_alarms(conn, all_alarms)
-                    log.info("alarm_sweep.alarms_fired", count=len(all_alarms))
-
-        except asyncio.CancelledError:
-            break
-        except Exception as exc:
-            log.error("alarm_sweep.error", error=str(exc))
-
-        await asyncio.sleep(settings.ALARM_SWEEP_INTERVAL)
-
-
-def evict_threshold_cache(tenant_id: str, plant_id: str, tag_name: str):
+async def evict_threshold_cache(tenant_id: str, plant_id: str, tag_name: str):
     """Remove a single tag's threshold from cache (called on metadata update)."""
-    _threshold_cache.pop((tenant_id, plant_id, tag_name), None)
+    from .stream_writer import redis_client
+
+    if redis_client:
+        key = f"threshold:cache:{tenant_id}:{plant_id}:{tag_name}"
+        await redis_client.delete(key)

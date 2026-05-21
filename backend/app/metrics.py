@@ -15,20 +15,35 @@ class RateLimiter:
 
     def __init__(self, limit: int):
         self._limit = limit
-        self._counts: Dict[str, int] = defaultdict(int)
-        self._window: Dict[str, float] = {}
 
-    def check(self, tenant_id: str, count: int) -> bool:
+    async def check(self, tenant_id: str, count: int) -> bool:
         """Returns True if request is within limit, False if it exceeds."""
-        now = time.monotonic()
-        if now - self._window.get(tenant_id, 0) >= 60:
-            self._counts[tenant_id] = 0
-            self._window[tenant_id] = now
-        self._counts[tenant_id] += count
-        return self._counts[tenant_id] <= self._limit
+        from .stream_writer import redis_client
 
-    def current(self, tenant_id: str) -> int:
-        return self._counts.get(tenant_id, 0)
+        if not redis_client:
+            return True  # Fallback if redis is not ready
+
+        window_seconds = 60
+        now_bucket = int(time.monotonic()) // window_seconds
+        key = f"ratelimit:{tenant_id}:{now_bucket}"
+
+        # We need to increment by `count`, not just 1, since the user uploads batches of points.
+        current_count = await redis_client.incrby(key, count)
+        if current_count == count:  # First time creating the key
+            await redis_client.expire(key, window_seconds * 2)
+
+        return current_count <= self._limit
+
+    async def current(self, tenant_id: str) -> int:
+        from .stream_writer import redis_client
+
+        if not redis_client:
+            return 0
+        window_seconds = 60
+        now_bucket = int(time.monotonic()) // window_seconds
+        key = f"ratelimit:{tenant_id}:{now_bucket}"
+        val = await redis_client.get(key)
+        return int(val) if val else 0
 
 
 class IngestionMetrics:

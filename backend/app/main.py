@@ -14,10 +14,10 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse, PlainTextResponse
 
-from .alarms import alarm_sweep_loop
+from .alarms import evict_threshold_cache
 from .broadcaster import ws_manager
 from .config import settings
-from .database import close_pool, create_pool, get_pool
+from .database import close_pools, create_pools, get_read_pool
 from .metrics import metrics
 from .stream_writer import init_redis_pool, close_redis_pool, redis_client
 from .stream_consumer import stream_consumer_worker
@@ -51,12 +51,12 @@ from contextlib import asynccontextmanager  # noqa: E402
 async def lifespan(app: FastAPI):
     log.info("startup.begin", app=settings.APP_NAME, version=settings.APP_VERSION, env=settings.ENVIRONMENT)
 
-    await create_pool()
+    await create_pools()
     await init_redis_pool()
     log.info("startup.db_pool_ready", min=settings.DB_POOL_MIN, max=settings.DB_POOL_MAX)
 
     # Schema integrity check
-    pool = get_pool()
+    pool = get_read_pool()
     async with pool.acquire() as conn:
         ht_count = await conn.fetchval("SELECT count(*) FROM timescaledb_information.hypertables")
         if ht_count < 3:
@@ -65,9 +65,6 @@ async def lifespan(app: FastAPI):
             )
         else:
             log.info("startup.schema_ok", hypertables=ht_count)
-
-    # Note: v3 alarm sweep is replaced by the stream alarm consumer, but we keep it running for fallback
-    sweep_task = asyncio.create_task(alarm_sweep_loop())
 
     # Start Redis consumer workers
     writer_tasks = [asyncio.create_task(stream_consumer_worker(i)) for i in range(settings.REDIS_CONSUMER_WORKERS)]
@@ -80,18 +77,17 @@ async def lifespan(app: FastAPI):
 
     # Graceful drain
     log.info("shutdown.draining_workers")
-    sweep_task.cancel()
     for task in writer_tasks + alarm_tasks:
         task.cancel()
 
     try:
-        await asyncio.gather(sweep_task, *writer_tasks, *alarm_tasks, return_exceptions=True)
+        await asyncio.gather(*writer_tasks, *alarm_tasks, return_exceptions=True)
     except Exception:
         pass
 
     await ws_manager.stop_pubsub()
     await close_redis_pool()
-    await close_pool()
+    await close_pools()
     log.info("shutdown.complete")
 
 
@@ -167,7 +163,7 @@ async def health():
     db_ms = None
     try:
         t0 = time.perf_counter()
-        pool = get_pool()
+        pool = get_read_pool()
         async with pool.acquire() as c:
             await c.fetchval("SELECT 1")
         db_ms = round((time.perf_counter() - t0) * 1000, 2)

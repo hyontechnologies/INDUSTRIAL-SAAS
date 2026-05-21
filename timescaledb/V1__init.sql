@@ -137,6 +137,25 @@ CREATE INDEX IF NOT EXISTS idx_api_keys_hash   ON api_keys (key_hash) WHERE is_a
 --   • Faster Grafana queries (no tag_name filter on massive table)
 --   • Cleaner per-system alerting
 
+CREATE TABLE IF NOT EXISTS tag_routing_rules (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    tenant_id TEXT NOT NULL REFERENCES tenants(tenant_id) ON DELETE CASCADE,
+    pattern TEXT NOT NULL,
+    pattern_type TEXT NOT NULL CHECK (pattern_type IN ('prefix', 'suffix', 'regex')),
+    target_table TEXT NOT NULL CHECK (
+        target_table IN (
+            'telemetry_temperature', 'telemetry_pressure', 'telemetry_level',
+            'telemetry_draught', 'telemetry_flow', 'telemetry_flow_totalizer',
+            'telemetry_motor_rpm', 'telemetry_motor_current', 'telemetry_esp_electrical',
+            'telemetry_control_valve', 'telemetry_digital_status', 'telemetry_performance',
+            'telemetry_vibration', 'telemetry_power_metering', 'telemetry_raw'
+        )
+    ),
+    priority INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_tag_routing_rules ON tag_routing_rules(tenant_id, priority DESC);
+
 -- ── §5.1 telemetry_temperature (TE-xxx, TT-xxx — 14 tags) ──────────────────
 CREATE TABLE IF NOT EXISTS telemetry_temperature (
     ts          TIMESTAMPTZ      NOT NULL,
@@ -888,8 +907,9 @@ BEGIN
             'alarm_history', 'api_keys', 'plants'
         ])
     LOOP
-        -- Enable RLS
+        -- Enable and Force RLS
         EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', tbl);
+        EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY', tbl);
 
         -- Create policy (skip if exists)
         IF NOT EXISTS (
@@ -904,9 +924,6 @@ BEGIN
     END LOOP;
 END;
 $$;
-
--- Force RLS even for table owner on critical tables
-ALTER TABLE telemetry_latest FORCE ROW LEVEL SECURITY;
 
 
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -1033,6 +1050,64 @@ VALUES
      NULL, NULL, NULL, NULL, 0)
 ON CONFLICT (tenant_id, plant_id, tag_name) DO NOTHING;
 
+-- Seed Piccadily tag routing rules (migrated from hardcoded Python list)
+INSERT INTO tag_routing_rules (tenant_id, pattern, pattern_type, target_table, priority)
+VALUES
+    ('piccadily', 'TE-', 'prefix', 'telemetry_temperature', 10),
+    ('piccadily', 'TT-', 'prefix', 'telemetry_temperature', 10),
+    ('piccadily', 'TE_', 'prefix', 'telemetry_temperature', 10),
+    ('piccadily', 'PT-', 'prefix', 'telemetry_pressure', 10),
+    ('piccadily', 'PT_', 'prefix', 'telemetry_pressure', 10),
+    ('piccadily', 'LT-', 'prefix', 'telemetry_level', 10),
+    ('piccadily', 'LT_', 'prefix', 'telemetry_level', 10),
+    ('piccadily', 'LVL_', 'prefix', 'telemetry_level', 10),
+    ('piccadily', 'STEAM_DRUM_LEVEL', 'prefix', 'telemetry_level', 100),
+    ('piccadily', 'DT-', 'prefix', 'telemetry_draught', 10),
+    ('piccadily', 'DT_', 'prefix', 'telemetry_draught', 10),
+    ('piccadily', 'TOTALIZER', 'prefix', 'telemetry_flow_totalizer', 50),
+    ('piccadily', 'FT-', 'prefix', 'telemetry_flow', 10),
+    ('piccadily', 'FT_', 'prefix', 'telemetry_flow', 10),
+    ('piccadily', 'ID_RPM', 'prefix', 'telemetry_motor_rpm', 20),
+    ('piccadily', 'FD_RPM', 'prefix', 'telemetry_motor_rpm', 20),
+    ('piccadily', 'SF1_RPM', 'prefix', 'telemetry_motor_rpm', 20),
+    ('piccadily', 'SF2_RPM', 'prefix', 'telemetry_motor_rpm', 20),
+    ('piccadily', 'SF3_RPM', 'prefix', 'telemetry_motor_rpm', 20),
+    ('piccadily', 'DE1_RPM', 'prefix', 'telemetry_motor_rpm', 20),
+    ('piccadily', 'DE2_RPM', 'prefix', 'telemetry_motor_rpm', 20),
+    ('piccadily', 'DE3_RPM', 'prefix', 'telemetry_motor_rpm', 20),
+    ('piccadily', 'FP1_RPM', 'prefix', 'telemetry_motor_rpm', 20),
+    ('piccadily', 'FP2_RPM', 'prefix', 'telemetry_motor_rpm', 20),
+    ('piccadily', 'TG_RPM', 'prefix', 'telemetry_motor_rpm', 20),
+    ('piccadily', 'DRM_FDR_RPM', 'prefix', 'telemetry_motor_rpm', 20),
+    ('piccadily', 'GM_', 'prefix', 'telemetry_motor_rpm', 10),
+    ('piccadily', '_RPM', 'suffix', 'telemetry_motor_rpm', 5),
+    ('piccadily', '_AMP', 'suffix', 'telemetry_motor_current', 5),
+    ('piccadily', 'AMP_', 'prefix', 'telemetry_motor_current', 5),
+    ('piccadily', '_CURRENT', 'suffix', 'telemetry_motor_current', 5),
+    ('piccadily', 'TRCC', 'prefix', 'telemetry_esp_electrical', 10),
+    ('piccadily', 'ESP_', 'prefix', 'telemetry_esp_electrical', 10),
+    ('piccadily', 'FCV_', 'prefix', 'telemetry_control_valve', 10),
+    ('piccadily', 'FCV-', 'prefix', 'telemetry_control_valve', 10),
+    ('piccadily', 'TCV_', 'prefix', 'telemetry_control_valve', 10),
+    ('piccadily', 'TCV-', 'prefix', 'telemetry_control_valve', 10),
+    ('piccadily', 'LCV_', 'prefix', 'telemetry_control_valve', 10),
+    ('piccadily', 'LCV-', 'prefix', 'telemetry_control_valve', 10),
+    ('piccadily', 'PCV_', 'prefix', 'telemetry_control_valve', 10),
+    ('piccadily', 'PCV-', 'prefix', 'telemetry_control_valve', 10),
+    ('piccadily', '_RUN', 'suffix', 'telemetry_digital_status', 5),
+    ('piccadily', '_TRIP', 'suffix', 'telemetry_digital_status', 5),
+    ('piccadily', 'INTLK', 'prefix', 'telemetry_digital_status', 5),
+    ('piccadily', '_STATUS', 'suffix', 'telemetry_digital_status', 5),
+    ('piccadily', 'BOILER_EFF', 'prefix', 'telemetry_performance', 100),
+    ('piccadily', 'STEAM_QUALITY', 'prefix', 'telemetry_performance', 100),
+    ('piccadily', 'HEAT_RATE', 'prefix', 'telemetry_performance', 100),
+    ('piccadily', 'EFF_', 'prefix', 'telemetry_performance', 10),
+    ('piccadily', 'VIB_', 'prefix', 'telemetry_vibration', 10),
+    ('piccadily', 'VIB-', 'prefix', 'telemetry_vibration', 10),
+    ('piccadily', 'PWR_', 'prefix', 'telemetry_power_metering', 10),
+    ('piccadily', 'KWH', 'prefix', 'telemetry_power_metering', 10),
+    ('piccadily', 'KW_', 'prefix', 'telemetry_power_metering', 10),
+    ('piccadily', 'PF_', 'prefix', 'telemetry_power_metering', 10);
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- §14  CONVENIENCE VIEW — telemetry_all (UNION ALL across group tables)
