@@ -15,7 +15,6 @@ from fastapi import Depends, Header, HTTPException, Request, status
 from jose import JWTError, jwt
 
 from .config import settings
-from .database import get_pool
 from .models import UserContext
 
 log = structlog.get_logger("historian.auth")
@@ -81,7 +80,9 @@ async def _verify_edge_api_key_db(raw_key: str) -> Optional[str]:
     h = _hash_api_key(raw_key)
 
     # DB lookup (primary source)
-    pool = get_pool()
+    from .database import get_read_pool
+
+    pool = get_read_pool()
     if pool:
         try:
             async with pool.acquire() as conn:
@@ -164,6 +165,15 @@ async def get_current_user(
     if not tenant_id:
         raise HTTPException(status_code=403, detail="tenant_id missing from token")
 
+    session_id = payload.get("session_id")
+    if session_id:
+        from .stream_writer import redis_client
+
+        if redis_client:
+            is_revoked = await redis_client.get(f"revoked:session:{session_id}")
+            if is_revoked:
+                raise HTTPException(status_code=401, detail="Session has been revoked")
+
     return UserContext(
         user_id=payload["sub"],
         tenant_id=tenant_id,
@@ -201,6 +211,22 @@ async def require_plant_access(plant_id: str, user: UserContext = Depends(get_cu
             status_code=403,
             detail=f"Access denied to plant '{plant_id}'. Allowed plants: {user.plant_ids}",
         )
+    if not user.plant_ids:
+        from .database import get_read_pool
+
+        pool = get_read_pool()
+        if pool:
+            async with pool.acquire() as conn:
+                row = await conn.fetchrow(
+                    "SELECT 1 FROM plants WHERE tenant_id=$1 AND plant_id=$2",
+                    user.tenant_id,
+                    plant_id,
+                )
+                if not row:
+                    raise HTTPException(
+                        status_code=404,
+                        detail=f"Plant '{plant_id}' not found in tenant '{user.tenant_id}'",
+                    )
     return user
 
 

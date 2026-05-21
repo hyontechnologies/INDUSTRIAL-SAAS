@@ -89,6 +89,6 @@ async def upsert_tag_metadata(
         payload.deadband,
         payload.is_active,
     )
-    evict_threshold_cache(user.tenant_id, plant_id, tag_name)
+    await evict_threshold_cache(user.tenant_id, plant_id, tag_name)
     await audit(conn, user, "UPSERT_TAG_METADATA", f"tags/{tag_name}")
     return {"ok": True, "tag_name": tag_name}

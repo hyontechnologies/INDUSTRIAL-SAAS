@@ -1,4 +1,4 @@
-# Piccadily Industrial Historian + Digital Twin Platform (v4.0.0)
+# Piccadily Industrial Historian (v4.0.0)
 
 [![CI Pipeline](https://github.com/hyontechnologies/industrial-telemetry-platform-init/actions/workflows/ci.yml/badge.svg)](https://github.com/hyontechnologies/industrial-telemetry-platform-init/actions/workflows/ci.yml)
 [![Docker Registry](https://img.shields.io/badge/Container%20Registry-GHCR-blue)](https://ghcr.io)
@@ -8,6 +8,12 @@
 Piccadily Industrial Historian is a high-performance, local-first, multi-tenant Industrial IoT SaaS platform designed to capture, archive, analyze, and visualize high-frequency time-series data. Specifically optimized to operate efficiently on single-host systems (e.g., a single 4GB RAM cloud VM), the platform merges high-speed industrial protocols with modern web interfaces.
 
 Version 4.0 merges the React/Vite client and FastAPI backend into a **single, unified, multi-stage Docker container**, eliminating multi-port orchestration issues, improving network latency, and enabling seamless, relative routing for high-throughput time-series streaming.
+
+### ✨ What's New in the Latest Update
+* **Enhanced Security & Auth**: Implemented WebSocket Ticket Pattern for secure WebSocket connections without exposing JWTs in URLs. Added Redis-backed session tracking for JWT revocation and enforced strict Database existence checks on endpoints.
+* **Database & Ingestion Optimization**: Split `asyncpg` into dedicated read and write connection pools to prevent read-heavy queries from blocking real-time telemetry ingestion. Fixed alarm deduplication using deterministic UUIDs.
+* **Resilience & Safety**: Implemented Redis Stream PEL (Pending Entries List) recovery on startup to claim messages from potentially dead consumers. Added explicit allowlist validation for telemetry endpoint intervals.
+* **DevOps Clean-Up**: Removed legacy monolithic files, renamed schema initializers, and updated CI/CD pipelines to ensure Docker deployments depend strictly on CI success.
 
 ---
 

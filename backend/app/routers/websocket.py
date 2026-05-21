@@ -5,14 +5,36 @@ Real-time telemetry streaming with per-room auth, snapshot on connect, and keepa
 
 import asyncio
 from typing import Optional
+import secrets
+import json
 
-from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect, Depends, HTTPException
 
-from ..auth import _decode_supabase_jwt, _verify_edge_api_key_db
+from ..auth import _verify_edge_api_key_db, require_permission, Permission
 from ..broadcaster import ws_manager
-from ..database import get_pool
+from ..database import get_read_pool
+from ..models import UserContext
 
 router = APIRouter(prefix="/api/v1", tags=["websocket"])
+
+
+@router.post("/ws/ticket")
+async def generate_ws_ticket(user: UserContext = Depends(require_permission(Permission.TELEMETRY_READ))):
+    """
+    Generate a short-lived, single-use ticket for WebSocket authentication.
+    This prevents passing JWTs in query parameters (which leak in Nginx logs).
+    """
+    from ..stream_writer import redis_client
+
+    if not redis_client:
+        raise HTTPException(status_code=503, detail="Redis unavailable")
+
+    ticket = secrets.token_urlsafe(32)
+    user_data = user.model_dump()
+
+    # Store ticket for 30 seconds
+    await redis_client.set(f"ws:ticket:{ticket}", json.dumps(user_data), ex=30)
+    return {"ticket": ticket}
 
 
 @router.websocket("/ws/{tenant_id}/{plant_id}")
@@ -20,12 +42,12 @@ async def websocket_stream(
     websocket: WebSocket,
     tenant_id: str,
     plant_id: str,
-    token: Optional[str] = Query(None),
+    ticket: Optional[str] = Query(None),
     api_key: Optional[str] = Query(None),
 ):
     """
     Real-time telemetry stream for dashboards and SCADA clients.
-    Auth: ?token=<Supabase JWT> OR ?api_key=<raw edge key>
+    Auth: ?ticket=<Ticket UUID> OR ?api_key=<raw edge key>
     On connect: sends snapshot of telemetry_latest.
     Keepalive: client sends "ping" → server replies "pong".
                server sends "pong" every 30s if no client message.
@@ -36,24 +58,29 @@ async def websocket_stream(
         if not t or t != tenant_id:
             await websocket.close(code=4401)
             return
-    elif token:
-        try:
-            payload = _decode_supabase_jwt(token)
-            meta = payload.get("app_metadata", {})
-            user_meta = payload.get("user_metadata", {})
-            t_id = meta.get("tenant_id") or user_meta.get("tenant_id")
+    elif ticket:
+        from ..stream_writer import redis_client
 
-            if t_id != tenant_id:
-                await websocket.close(code=4403)
-                return
+        if not redis_client:
+            await websocket.close(code=1011, reason="Redis unavailable")
+            return
 
-            plant_ids = meta.get("plant_ids", [])
-            if plant_ids and plant_id not in plant_ids:
-                await websocket.close(code=4403, reason="Access denied to plant")
-                return
+        data = await redis_client.get(f"ws:ticket:{ticket}")
+        if not data:
+            await websocket.close(code=4401, reason="Invalid or expired ticket")
+            return
 
-        except Exception:
-            await websocket.close(code=4401)
+        await redis_client.delete(f"ws:ticket:{ticket}")
+
+        user_dict = json.loads(data)
+        t_id = user_dict.get("tenant_id")
+        if t_id != tenant_id:
+            await websocket.close(code=4403, reason="Tenant mismatch")
+            return
+
+        plant_ids = user_dict.get("plant_ids", [])
+        if plant_ids and plant_id not in plant_ids:
+            await websocket.close(code=4403, reason="Access denied to plant")
             return
     else:
         await websocket.close(code=4401)
@@ -63,7 +90,7 @@ async def websocket_stream(
 
     try:
         # Send current snapshot from telemetry_latest
-        pool = get_pool()
+        pool = get_read_pool()
         async with pool.acquire() as conn:
             rows = await conn.fetch(
                 "SELECT tag_name, value, quality, ts, unit FROM telemetry_latest WHERE tenant_id=$1 AND plant_id=$2",

@@ -1,25 +1,39 @@
+import pytest
 from app.tag_router import TagRouter
 
 
-def test_tag_router_temperature():
+class MockConn:
+    async def fetch(self, query, tenant_id):
+        return []
+
+
+@pytest.mark.asyncio
+async def test_tag_router_temperature():
     router = TagRouter()
-    hypertable = router.route_tag("TT-201", "temperature")
+    conn = MockConn()
+    hypertable = await router.route_tag(conn, "test_tenant", "TT-201", "temperature")
     assert hypertable == "telemetry_temperature"
 
 
-def test_tag_router_pressure():
+@pytest.mark.asyncio
+async def test_tag_router_pressure():
     router = TagRouter()
-    hypertable = router.route_tag("PT-201", "pressure")
+    conn = MockConn()
+    hypertable = await router.route_tag(conn, "test_tenant", "PT-201", "pressure")
     assert hypertable == "telemetry_pressure"
 
 
-def test_tag_router_raw_fallback():
+@pytest.mark.asyncio
+async def test_tag_router_raw_fallback():
     router = TagRouter()
-    hypertable = router.route_tag("UNKNOWN-100", None)
+    conn = MockConn()
+    hypertable = await router.route_tag(conn, "test_tenant", "UNKNOWN-100", None)
     assert hypertable == "telemetry_raw"
 
 
-def test_tag_router_level():
+@pytest.mark.asyncio
+async def test_tag_router_level():
     router = TagRouter()
-    hypertable = router.route_tag("LT-201", "level")
+    conn = MockConn()
+    hypertable = await router.route_tag(conn, "test_tenant", "LT-201", "level")
     assert hypertable == "telemetry_level"

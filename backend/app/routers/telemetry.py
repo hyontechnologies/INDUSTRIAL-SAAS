@@ -81,24 +81,19 @@ async def get_history(
     conn: asyncpg.Connection = Depends(get_db),
 ):
     """Tag history with time-bucket aggregation. Auto-selects raw or continuous aggregate."""
-    valid_aggs = {"avg", "min", "max", "last"}
+    valid_aggs = {"avg", "min", "max", "last", "first"}
     if agg not in valid_aggs:
         raise HTTPException(422, f"agg must be one of {valid_aggs}")
 
-    tag_meta = await conn.fetchrow(
-        "SELECT tag_group FROM tag_metadata WHERE tenant_id=$1 AND plant_id=$2 AND tag_name=$3",
-        user.tenant_id,
-        plant_id,
-        tag_name,
-    )
-    group = tag_meta["tag_group"] if tag_meta else None
-    hypertable = tag_router.route_tag(tag_name, group)
+    valid_intervals = {"1m", "5m", "15m", "1h", "1d", "raw"}
+    if interval not in valid_intervals:
+        raise HTTPException(422, f"interval must be one of {valid_intervals}")
 
     if interval == "raw":
         rows = await conn.fetch(
-            f"SELECT ts, value, quality FROM {hypertable} "
-            f"WHERE tenant_id=$1 AND plant_id=$2 AND tag_name=$3 "
-            f"AND ts BETWEEN $4 AND $5 ORDER BY ts DESC LIMIT $6",
+            "SELECT ts, value, quality FROM telemetry_all "
+            "WHERE tenant_id=$1 AND plant_id=$2 AND tag_name=$3 "
+            "AND ts BETWEEN $4 AND $5 ORDER BY ts DESC LIMIT $6",
             user.tenant_id,
             plant_id,
             tag_name,
@@ -119,7 +114,7 @@ async def get_history(
 
         rows = await conn.fetch(
             f"SELECT time_bucket('{pg_interval}', ts) AS ts, {agg_sql} AS value, count(value) AS sample_count "
-            f"FROM {hypertable} WHERE tenant_id=$1 AND plant_id=$2 AND tag_name=$3 "
+            f"FROM telemetry_all WHERE tenant_id=$1 AND plant_id=$2 AND tag_name=$3 "
             f"AND ts BETWEEN $4 AND $5 "
             f"GROUP BY ts ORDER BY ts DESC LIMIT $6",
             user.tenant_id,
@@ -155,13 +150,13 @@ async def get_multi_history(
     """Multi-tag trend correlation. Returns pivot format for React charts."""
     tag_list = [t.strip() for t in tags.split(",")][:10]
 
-    meta_rows = await conn.fetch(
-        "SELECT tag_name, tag_group FROM tag_metadata WHERE tenant_id=$1 AND plant_id=$2 AND tag_name = ANY($3)",
-        user.tenant_id,
-        plant_id,
-        tag_list,
-    )
-    tag_groups = {r["tag_name"]: r["tag_group"] for r in meta_rows}
+    valid_aggs = {"avg", "min", "max", "last", "first"}
+    if agg not in valid_aggs:
+        raise HTTPException(422, f"agg must be one of {valid_aggs}")
+
+    valid_intervals = {"1m", "5m", "15m", "1h", "1d"}
+    if interval not in valid_intervals:
+        raise HTTPException(422, f"interval must be one of {valid_intervals}")
 
     pg_interval = {"1m": "1 minute", "5m": "5 minutes", "15m": "15 minutes", "1h": "1 hour", "1d": "1 day"}.get(
         interval, "5 minutes"
@@ -177,12 +172,9 @@ async def get_multi_history(
     pivot = {}
 
     for tag_name in tag_list:
-        group = tag_groups.get(tag_name)
-        hypertable = tag_router.route_tag(tag_name, group)
-
         rows = await conn.fetch(
             f"SELECT time_bucket('{pg_interval}', ts) AS ts, {agg_sql} AS value "
-            f"FROM {hypertable} WHERE tenant_id=$1 AND plant_id=$2 AND tag_name=$3 "
+            f"FROM telemetry_all WHERE tenant_id=$1 AND plant_id=$2 AND tag_name=$3 "
             f"AND ts BETWEEN $4 AND $5 GROUP BY ts ORDER BY ts DESC LIMIT $6",
             user.tenant_id,
             plant_id,
@@ -222,7 +214,7 @@ async def get_tag_stats(
         tag_name,
     )
     group = tag_meta["tag_group"] if tag_meta else None
-    hypertable = tag_router.route_tag(tag_name, group)
+    hypertable = await tag_router.route_tag(conn, user.tenant_id, tag_name, group)
 
     row = await conn.fetchrow(
         f"SELECT count(*) AS sample_count, round(avg(value)::numeric, 4) AS avg_val, "
@@ -286,7 +278,7 @@ async def export_telemetry(
         tag_name,
     )
     group = tag_meta["tag_group"] if tag_meta else None
-    hypertable = tag_router.route_tag(tag_name, group)
+    hypertable = await tag_router.route_tag(conn, user.tenant_id, tag_name, group)
 
     rows = await conn.fetch(
         f"SELECT ts, value, quality FROM {hypertable} "

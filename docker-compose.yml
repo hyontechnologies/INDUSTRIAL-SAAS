@@ -18,7 +18,7 @@ services:
       - "5432:5432"
     volumes:
       - tsdb_data:/var/lib/postgresql/data
-      - ./timescaledb/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+      - ./timescaledb/V1__init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
     command: >
       postgres
         -c shared_buffers=256MB
@@ -91,8 +91,7 @@ services:
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-grafana_dev}
       GF_SERVER_ROOT_URL:         "http://localhost:3001/grafana/"
       GF_SERVER_SERVE_FROM_SUB_PATH: "true"
-      GF_AUTH_ANONYMOUS_ENABLED:  "true"
-      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_AUTH_ANONYMOUS_ENABLED:  "false"
     ports:
       - "3001:3000"
     volumes:

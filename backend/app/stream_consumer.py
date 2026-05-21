@@ -12,7 +12,7 @@ import asyncpg
 import structlog
 
 from .config import settings
-from .database import get_pool
+from .database import get_write_pool
 from .stream_writer import redis_client
 from .tag_router import route_tag
 
@@ -59,91 +59,89 @@ async def write_to_timescaledb(pool: asyncpg.Pool, batches: List[Dict[str, Any]]
     if not batches:
         return
 
-    # Group by target hypertable: { "telemetry_temperature": [row1, row2, ...] }
-    table_groups: Dict[str, List[Tuple]] = defaultdict(list)
-    latest_updates: Dict[Tuple[str, str, str], Tuple] = {}
-
+    # Group by tenant_id first for RLS boundaries
+    tenant_groups: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
     for row in batches:
-        tenant_id = row["tenant_id"]
-        plant_id = row["plant_id"]
-        tag_name = row["tag_name"]
+        tenant_groups[row["tenant_id"]].append(row)
 
-        target_table = route_tag(tag_name)
+    for tenant_id, tenant_batches in tenant_groups.items():
+        table_groups: Dict[str, List[Tuple]] = defaultdict(list)
+        latest_updates: Dict[Tuple[str, str, str], Tuple] = {}
 
-        # Parse numeric and timestamp
-        try:
-            val = float(row["value"])
-            ts = datetime.fromisoformat(row["ts"]) if row.get("ts") else datetime.utcnow()
-        except (ValueError, TypeError):
-            continue
+        for row in tenant_batches:
+            plant_id = row["plant_id"]
+            tag_name = row["tag_name"]
+            target_table = await route_tag(pool, tenant_id, tag_name)
 
-        bool_val = row.get("bool_value")
-        if bool_val is not None:
-            bool_val = bool_val.lower() in ("true", "1", "yes")
+            try:
+                val = float(row["value"])
+                ts = datetime.fromisoformat(row["ts"]) if row.get("ts") else datetime.utcnow()
+            except (ValueError, TypeError):
+                continue
 
-        quality = row.get("quality", "GOOD")
-        unit = row.get("unit")
-        source_id = row.get("source_id")
+            bool_val = row.get("bool_value")
+            if bool_val is not None:
+                bool_val = bool_val.lower() in ("true", "1", "yes")
 
-        # Tuple format matches the table columns exactly for COPY
-        # ts, tenant_id, plant_id, tag_name, value, bool_value, quality, unit, source_id
-        db_row = (ts, tenant_id, plant_id, tag_name, val, bool_val, quality, unit, source_id)
+            quality = row.get("quality", "GOOD")
+            unit = row.get("unit")
+            source_id = row.get("source_id")
 
-        table_groups[target_table].append(db_row)
+            db_row = (ts, tenant_id, plant_id, tag_name, val, bool_val, quality, unit, source_id)
+            table_groups[target_table].append(db_row)
 
-        # Keep only the newest point for telemetry_latest
-        key = (tenant_id, plant_id, tag_name)
-        existing = latest_updates.get(key)
-        if not existing or existing[0] < ts:  # Compare timestamp
-            latest_updates[key] = (ts, tenant_id, plant_id, tag_name, val, bool_val, quality, unit)
+            key = (tenant_id, plant_id, tag_name)
+            existing = latest_updates.get(key)
+            if not existing or existing[0] < ts:
+                latest_updates[key] = (ts, tenant_id, plant_id, tag_name, val, bool_val, quality, unit)
 
-    async with pool.acquire() as conn:
-        async with conn.transaction():
-            # 1. Bulk COPY to hypertables
-            for table_name, rows in table_groups.items():
-                try:
-                    await conn.copy_records_to_table(
-                        table_name,
-                        records=rows,
-                        columns=[
-                            "ts",
-                            "tenant_id",
-                            "plant_id",
-                            "tag_name",
-                            "value",
-                            "bool_value",
-                            "quality",
-                            "unit",
-                            "source_id",
-                        ],
-                    )
-                except Exception as e:
-                    log.error("db.copy_error", table=table_name, error=str(e), count=len(rows))
-                    raise  # Rollback transaction
+        async with pool.acquire() as conn:
+            await conn.execute("SET app.current_tenant = $1", tenant_id)
+            try:
+                async with conn.transaction():
+                    for table_name, rows in table_groups.items():
+                        try:
+                            await conn.copy_records_to_table(
+                                table_name,
+                                records=rows,
+                                columns=[
+                                    "ts",
+                                    "tenant_id",
+                                    "plant_id",
+                                    "tag_name",
+                                    "value",
+                                    "bool_value",
+                                    "quality",
+                                    "unit",
+                                    "source_id",
+                                ],
+                            )
+                        except Exception as e:
+                            log.error("db.copy_error", table=table_name, error=str(e), count=len(rows))
+                            raise
 
-            # 2. Upsert telemetry_latest
-            if latest_updates:
-                latest_rows = list(latest_updates.values())
-                # For latest, the tuple is: (ts, tenant_id, plant_id, tag_name, value, bool_value, quality, unit)
-                # But the insert values need to match the query parameters
-                insert_vals = [(r[1], r[2], r[3], r[4], r[5], r[6], r[0], r[7]) for r in latest_rows]
-                await conn.executemany(
-                    """
-                    INSERT INTO telemetry_latest
-                        (tenant_id, plant_id, tag_name, value, bool_value, quality, ts, unit)
-                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-                    ON CONFLICT (tenant_id, plant_id, tag_name)
-                    DO UPDATE SET
-                        value = EXCLUDED.value,
-                        bool_value = EXCLUDED.bool_value,
-                        quality = EXCLUDED.quality,
-                        ts = EXCLUDED.ts,
-                        unit = EXCLUDED.unit
-                    """,
-                    insert_vals,
-                )
+                    if latest_updates:
+                        latest_rows = list(latest_updates.values())
+                        insert_vals = [(r[1], r[2], r[3], r[4], r[5], r[6], r[0], r[7]) for r in latest_rows]
+                        await conn.executemany(
+                            """
+                            INSERT INTO telemetry_latest
+                                (tenant_id, plant_id, tag_name, value, bool_value, quality, ts, unit)
+                            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                            ON CONFLICT (tenant_id, plant_id, tag_name)
+                            DO UPDATE SET
+                                value = EXCLUDED.value,
+                                bool_value = EXCLUDED.bool_value,
+                                quality = EXCLUDED.quality,
+                                ts = EXCLUDED.ts,
+                                unit = EXCLUDED.unit
+                            """,
+                            insert_vals,
+                        )
+            finally:
+                await conn.execute("RESET app.current_tenant")
 
-    log.debug("db.batch_written", total_points=len(batches), tables=list(table_groups.keys()))
+    log.debug("db.batch_written", total_points=len(batches))
 
 
 async def stream_consumer_worker(worker_id: int):
@@ -155,7 +153,48 @@ async def stream_consumer_worker(worker_id: int):
 
     # Wait for pool to initialize
     await asyncio.sleep(2)
-    pool = get_pool()
+    pool = get_write_pool()
+
+    # --- PEL Recovery on Startup ---
+    try:
+        streams = await get_active_streams()
+        for s in streams:
+            await setup_consumer_group(s)
+
+        if streams:
+            log.info("worker.pel_recovery_start", worker_id=worker_id)
+            streams_dict_0 = {s: "0" for s in streams}
+            while True:
+                messages = await redis_client.xreadgroup(
+                    groupname=CONSUMER_GROUP,
+                    consumername=consumer_name,
+                    streams=streams_dict_0,
+                    count=settings.REDIS_CONSUMER_BATCH_SIZE,
+                    block=None,
+                )
+                if not messages:
+                    break
+
+                has_pending = False
+                for stream_name, stream_messages in messages:
+                    if not stream_messages:
+                        continue
+                    has_pending = True
+                    batch_data = [msg_data for _, msg_data in stream_messages]
+                    msg_ids = [msg_id for msg_id, _ in stream_messages]
+                    try:
+                        await write_to_timescaledb(pool, batch_data)
+                        await redis_client.xack(stream_name, CONSUMER_GROUP, *msg_ids)
+                        log.info("worker.pel_recovered", stream=stream_name, count=len(msg_ids))
+                    except Exception as e:
+                        log.error("worker.pel_write_failed", error=str(e), stream=stream_name)
+
+                if not has_pending:
+                    break
+            log.info("worker.pel_recovery_complete", worker_id=worker_id)
+    except Exception as e:
+        log.error("worker.pel_recovery_error", error=str(e))
+    # -------------------------------
 
     while True:
         try:
