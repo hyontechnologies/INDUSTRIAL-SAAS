@@ -59,6 +59,15 @@ erDiagram
         TIMESTAMPTZ expires_at
         TIMESTAMPTZ last_used_at
     }
+    tag_routing_rules {
+        UUID id PK
+        TEXT tenant_id FK
+        TEXT pattern
+        TEXT pattern_type
+        TEXT target_table
+        INTEGER priority
+        TIMESTAMPTZ created_at
+    }
     telemetry_latest {
         TEXT tenant_id PK, FK
         TEXT plant_id PK, FK
@@ -105,6 +114,7 @@ erDiagram
 
     tenants ||--o{ plants : "hosts"
     tenants ||--o{ api_keys : "owns"
+    tenants ||--o{ tag_routing_rules : "defines"
     plants ||--o{ tag_metadata : "contains"
     tag_metadata ||--o{ telemetry_latest : "mirrors latest"
     alarms ||--o{ alarm_history : "logs transitions"
@@ -212,6 +222,22 @@ Standard table acts as a fast cache mirror for the absolute latest values. Offer
 | `ts` | `TIMESTAMPTZ`| `NOT NULL` | *None* | Timestamp of last recorded change. |
 | `unit` | `TEXT` | *None* | *None* | Metric unit representation. |
 
+### 2.6 `tag_routing_rules`
+Dynamic rules for routing incoming tags to specific hypertable groups based on prefixes, suffixes, or regex.
+- **Primary Key:** `id`
+- **Indices:**
+  - `idx_tag_routing_rules` on `(tenant_id, priority DESC)`
+
+| Column | Type | Constraints | Default | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `id` | `UUID` | `PRIMARY KEY` | `uuid_generate_v4()` | Unique rule ID. |
+| `tenant_id` | `TEXT` | `FOREIGN KEY` references `tenants(tenant_id) ON DELETE CASCADE` | *None* | Owner tenant namespace. |
+| `pattern` | `TEXT` | `NOT NULL` | *None* | String pattern to match against tag names. |
+| `pattern_type`| `TEXT` | `NOT NULL` | *None* | Type of match (`prefix`, `suffix`, `regex`). |
+| `target_table`| `TEXT` | `NOT NULL` | *None* | Target hypertable (e.g., `telemetry_temperature`). |
+| `priority` | `INTEGER` | `NOT NULL` | `0` | Routing rule evaluation priority (higher evaluated first). |
+| `created_at` | `TIMESTAMPTZ`| *None* | `now()` | Rule creation timestamp. |
+
 ---
 
 ## 3. TimescaleDB Specialized Hypertables
@@ -275,7 +301,7 @@ A TimescaleDB hypertable managing warning and alert states triggered by tag thre
 
 | Column | Type | Constraints / Default | Description |
 | :--- | :--- | :--- | :--- |
-| `alarm_id` | `UUID` | `NOT NULL DEFAULT uuid_generate_v4()` | Unique alarm trace ID. |
+| `alarm_id` | `UUID` | `NOT NULL DEFAULT uuid_generate_v4()` | Unique alarm trace ID (deterministically generated using `uuid5` in backend layer for deduplication). |
 | `tenant_id` | `TEXT` | `NOT NULL` | Tenant namespace. |
 | `plant_id` | `TEXT` | `NOT NULL` | Associated facility ID. |
 | `tag_name` | `TEXT` | `NOT NULL` | Triggering PLC metric tag. |
