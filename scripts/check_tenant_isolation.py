@@ -25,6 +25,10 @@ def check_tenant_isolation(backend_dir: Path) -> bool:
         "websocket_stream": [
             "SELECT tag_name, value, quality, ts, unit FROM telemetry_latest WHERE tenant_id=$1 AND plant_id=$2"
         ],
+        "create_tenant": [
+            "SELECT 1 FROM tenants WHERE tenant_id = $1",
+            "INSERT INTO tenants (tenant_id, name) VALUES ($1, $2)",
+        ],
     }
 
     for py_file in routers_dir.rglob("*.py"):
