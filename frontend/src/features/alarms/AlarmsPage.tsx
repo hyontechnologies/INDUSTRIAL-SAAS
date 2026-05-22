@@ -6,13 +6,11 @@ import {
   Bell,
   BellOff,
   Check,
-  CheckCheck,
   Filter,
   AlertTriangle,
   AlertOctagon,
   Info,
   ShieldAlert,
-  XCircle,
 } from 'lucide-react';
 import type { Alarm, AlarmSeverity, AlarmState } from '../../shared/types';
 

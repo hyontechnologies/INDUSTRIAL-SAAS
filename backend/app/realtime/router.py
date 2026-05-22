@@ -10,10 +10,10 @@ import json
 
 from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect, Depends, HTTPException
 
-from ..auth import _verify_edge_api_key_db, require_permission, Permission
-from ..broadcaster import ws_manager
-from ..database import get_read_pool
-from ..models import UserContext
+from app.identity.auth import _verify_edge_api_key_db, require_permission, Permission
+from app.realtime.broadcaster import ws_manager
+from app.infra.database import get_read_pool
+from app.models import UserContext
 
 router = APIRouter(prefix="/api/v1", tags=["websocket"])
 
@@ -24,7 +24,7 @@ async def generate_ws_ticket(user: UserContext = Depends(require_permission(Perm
     Generate a short-lived, single-use ticket for WebSocket authentication.
     This prevents passing JWTs in query parameters (which leak in Nginx logs).
     """
-    from ..stream_writer import redis_client
+    from app.telemetry.stream_writer import redis_client
 
     if not redis_client:
         raise HTTPException(status_code=503, detail="Redis unavailable")
@@ -59,7 +59,7 @@ async def websocket_stream(
             await websocket.close(code=4401)
             return
     elif ticket:
-        from ..stream_writer import redis_client
+        from app.telemetry.stream_writer import redis_client
 
         if not redis_client:
             await websocket.close(code=1011, reason="Redis unavailable")

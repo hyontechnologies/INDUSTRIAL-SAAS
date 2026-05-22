@@ -6,14 +6,15 @@ CRUD operations for plants with tenant isolation.
 import asyncio
 import json
 from datetime import datetime, timezone
+from typing import Any
 
 import asyncpg
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.identity.auth import Permission, audit, require_permission, require_plant_access
 from app.infra.database import get_db
-from app.plant.models import PlantCreate
-from app.identity.models import UserContext
+from app.models import PlantCreate
+from app.models import UserContext
 from app.core.pagination import PaginationParams, PaginatedResponse, build_paginated_response
 
 router = APIRouter(prefix="/api/v1/plants", tags=["plants"])
@@ -28,7 +29,7 @@ async def list_plants(
     query = (
         "SELECT plant_id, name, location, plant_type, timezone, is_active, created_at FROM plants WHERE tenant_id=$1"
     )
-    params = [user.tenant_id]
+    params: list[Any] = [user.tenant_id]
 
     if user.plant_ids:
         query += " AND plant_id = ANY($2)"

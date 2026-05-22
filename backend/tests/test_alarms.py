@@ -31,7 +31,7 @@ async def test_evaluate_alarms_high_high(mock_db_conn):
         }
     )
 
-    with patch("app.alarms._check_cooldown", return_value=True):
+    with patch("app.alarms.engine._check_cooldown", return_value=True):
         alarms = await evaluate_alarms_for_batch(mock_db_conn, "piccadily", "BOILER_PLC_01", points)
         assert len(alarms) == 1
         assert alarms[0]["severity"] == AlarmSeverity.CRITICAL.value

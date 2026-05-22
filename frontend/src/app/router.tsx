@@ -1,23 +1,13 @@
-import { createBrowserRouter, Navigate, useLocation } from 'react-router-dom';
-import { useAppStore } from '../shared/stores/useAppStore';
+import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { Layout } from './layout';
 import LoginPage from '../features/auth/LoginPage';
+import { AuthGuard } from '../features/auth/AuthGuard';
 import DashboardPage from '../features/dashboard/DashboardPage';
 import AlarmsPage from '../features/alarms/AlarmsPage';
 import TelemetryPage from '../features/telemetry/TelemetryPage';
 import HistorianPage from '../features/historian/HistorianPage';
 import PlantsPage from '../features/plants/PlantsPage';
 import AdminPage from '../features/admin/AdminPage';
-
-function AuthGuard({ children }: { children: React.ReactNode }) {
-  const isAuthenticated = useAppStore((s) => s.isAuthenticated);
-  const location = useLocation();
-
-  if (!isAuthenticated) {
-    return <Navigate to="/login" state={{ from: location }} replace />;
-  }
-  return <>{children}</>;
-}
 
 export const router = createBrowserRouter([
   {

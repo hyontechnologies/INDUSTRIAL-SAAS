@@ -80,8 +80,7 @@ def _lru_get(key: Tuple[str, str]) -> Optional[str]:
 async def _load_rules(conn_or_pool, tenant_id: str) -> List[Tuple[Any, str, str]]:
     """Load routing rules from DB and cache with TTL."""
     rows = await conn_or_pool.fetch(
-        "SELECT pattern, pattern_type, target_table FROM tag_routing_rules "
-        "WHERE tenant_id=$1 ORDER BY priority DESC",
+        "SELECT pattern, pattern_type, target_table FROM tag_routing_rules WHERE tenant_id=$1 ORDER BY priority DESC",
         tenant_id,
     )
     parsed_rules: List[Tuple[Any, str, str]] = []

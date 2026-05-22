@@ -12,7 +12,7 @@ import structlog
 from fastapi import WebSocket
 
 from app.telemetry.stream_writer import redis_client
-from .core.redis_keys import ws_broadcast_channel
+from app.core.redis_keys import ws_broadcast_channel
 
 log = structlog.get_logger("historian.broadcaster")
 

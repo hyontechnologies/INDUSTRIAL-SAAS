@@ -104,7 +104,7 @@ class IngestionMetrics:
 
 
 # Singleton instances
-from .config import settings  # noqa: E402
+from app.config import settings  # noqa: E402
 
 metrics = IngestionMetrics()
 rate_limiter = RateLimiter(settings.RATE_LIMIT_POINTS_PER_MIN)

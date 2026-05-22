@@ -9,12 +9,12 @@ import uuid
 import asyncpg
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from ..auth import Permission, audit, require_permission, _hash_api_key
-from ..broadcaster import ws_manager
-from ..database import get_db
-from ..metrics import metrics
-from ..config import settings
-from ..models import ApiKeyCreate, UserContext
+from app.identity.auth import Permission, audit, require_permission, _hash_api_key
+from app.realtime.broadcaster import ws_manager
+from app.infra.database import get_db
+from app.infra.metrics import metrics
+from app.config import settings
+from app.models import ApiKeyCreate, UserContext
 
 from pydantic import BaseModel, Field
 
@@ -47,7 +47,7 @@ async def revoke_session(
     user: UserContext = Depends(require_permission(Permission.ADMIN_USERS)),
     conn: asyncpg.Connection = Depends(get_db),
 ):
-    from ..stream_writer import redis_client
+    from app.telemetry.stream_writer import redis_client
 
     if not redis_client:
         raise HTTPException(status_code=503, detail="Redis unavailable")

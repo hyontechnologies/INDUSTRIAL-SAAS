@@ -10,10 +10,10 @@ from typing import Optional
 import asyncpg
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from ..auth import Permission, audit, require_permission, require_plant_access
-from ..broadcaster import ws_manager
-from ..database import get_db
-from ..models import AlarmAckRequest, AlarmClearRequest, UserContext
+from app.identity.auth import Permission, audit, require_permission, require_plant_access
+from app.realtime.broadcaster import ws_manager
+from app.infra.database import get_db
+from app.models import AlarmAckRequest, AlarmClearRequest, UserContext
 
 router = APIRouter(prefix="/api/v1/alarms", tags=["alarms"])
 

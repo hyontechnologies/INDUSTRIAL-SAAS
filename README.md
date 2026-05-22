@@ -91,7 +91,7 @@ Every component of the Piccadily Historian has been engineered from the ground u
 
 ---
 
-## ⚠️ Architectural Gaps & Production Recommendations
+## 🏗️ Architectural Gaps & Production Recommendations
 
 While version 4.0.0 represents a production-grade historian, the following items represent current architecture gaps to address before enterprise scaling:
 
@@ -103,22 +103,33 @@ While version 4.0.0 represents a production-grade historian, the following items
 
 ---
 
+## 🚀 Recent Refactoring (Phases 1-3)
+
+We recently modernized the codebase from a flat prototype to a Domain-Driven enterprise structure:
+- **Modular Backend**: Extracted `app/` monolithic structure into bounded contexts (`identity`, `plant`, `telemetry`, `alarms`, `realtime`, `admin`, `infra`).
+- **Resilient WebSockets**: Migrated from sequential broadcasting to parallel `asyncio.gather()` fanout, preventing head-of-line blocking by slow clients.
+- **Frontend Rewrite**: Replaced the 1000-line God-component (`App.tsx`) with a scalable `src/features/` architecture powered by React Router v7, Zustand, and shadcn/ui.
+- **Performance**: Integrated a strict 10K-bounded LRU cache for tag routing and Cursor-Based Pagination for heavy REST APIs.
+- **Strict Code Maintenance**: CI/CD pipeline enforces `mypy` strict typing, `ruff` checks, frontend `eslint`, and `tsc` transpilation validations.
+
+---
+
 ## 📁 Repository Structure
 
 ```
 .
-├── .github/workflows/         # GitHub Actions workflows (CI checks & Deploy Builder)
-├── backend/                   # Combined Web Application folder
-│   ├── app/                   # FastAPI Codebase (Lifespan, Auth, Routers)
-│   ├── tests/                 # Integration and unit pytest suite
-│   └── Dockerfile             # Multi-stage Unified Web App Dockerfile
-├── frontend/                  # React TS + Vite source code (bundled inside Docker)
-├── edge-agent/                # Edge OPC UA collector & PLC Boiler Simulator
-├── timescaledb/               # TimescaleDB initialization schemas & seed data
-├── nginx/                     # Gateway Nginx reverse proxy configuration
-├── api_integration_guide.md   # Specialized guide for frontend and custom clients
-├── run_externals.py           # Local simulator runner
-└── docker-compose.yml         # Dev Docker orchestration file
+📂 .github/workflows/         # GitHub Actions (CI strict tests & Deploy Builder)
+📂 backend/                   # FastAPI Backend
+  📂 app/                   # Domain-Driven Core (identity, alarms, telemetry, etc.)
+  📂 tests/                 # Integration and unit pytest suite
+  📄 Dockerfile             # Backend API Dockerfile
+📂 frontend/                  # React TS + Vite source code (bundled inside Docker)
+📂 edge-agent/                # Edge OPC UA collector & Universal Sub Handler
+📂 plant_simulator/           # Local Edge PLC Simulators & Utilities
+📂 timescaledb/               # TimescaleDB initialization schemas & seed data
+📂 nginx/                     # Gateway Nginx reverse proxy configuration
+📄 api_integration_guide.md   # Specialized guide for frontend and custom clients
+📄 docker-compose.yml         # Dev Docker orchestration file
 ```
 
 ---

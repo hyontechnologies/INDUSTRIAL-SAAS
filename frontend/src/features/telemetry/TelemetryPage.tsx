@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { useAppStore } from '../../shared/stores/useAppStore';
 import { cn } from '../../shared/utils/cn';
 import { Tags, Search, Activity } from 'lucide-react';
-import type { TelemetryLatest } from '../../shared/types';
+import type {  } from '../../shared/types';
 
 export default function TelemetryPage() {
   const latestValues = useAppStore((s) => s.latestValues);

@@ -16,7 +16,7 @@ from fastapi.responses import JSONResponse, PlainTextResponse
 
 from app.alarms.engine import evict_threshold_cache
 from app.realtime.broadcaster import ws_manager
-from .config import settings
+from app.config import settings
 from app.infra.database import close_pools, create_pools, get_read_pool
 from app.infra.metrics import metrics
 from app.telemetry.stream_writer import init_redis_pool, close_redis_pool, redis_client
@@ -47,7 +47,7 @@ from app.plant.router import router as plants_router
 from app.telemetry.tags_router import router as tags_router
 from app.telemetry.router import router as telemetry_router
 from app.realtime.router import router as websocket_router
-from .core.observability import register_exception_handlers  # noqa: E402
+from app.core.observability import register_exception_handlers  # noqa: E402
 
 
 # ── Lifespan ────────────────────────────────────────────────────────────────────
@@ -157,13 +157,13 @@ async def request_id_middleware(request: Request, call_next):
 
 # ── Application Routing ─────────────────────────────────────────────────────────
 
-app.include_router(websocket_router, prefix="/api/v1/ws", tags=["websocket"])
-app.include_router(telemetry_router, prefix="/api/v1/telemetry", tags=["telemetry"])
-app.include_router(tags_router, prefix="/api/v1/tags", tags=["tags"])
-app.include_router(plants_router, prefix="/api/v1/plants", tags=["plants"])
-app.include_router(alarms_router, prefix="/api/v1/alarms", tags=["alarms"])
-app.include_router(admin_router, prefix="/api/v1/admin", tags=["admin"])
-app.include_router(grafana_router, prefix="/api/v1/grafana", tags=["grafana"])
+app.include_router(websocket_router)
+app.include_router(telemetry_router)
+app.include_router(tags_router)
+app.include_router(plants_router)
+app.include_router(alarms_router)
+app.include_router(admin_router)
+app.include_router(grafana_router)
 
 
 # ── Health & Metrics (not in routers — these are ops-only) ──────────────────────

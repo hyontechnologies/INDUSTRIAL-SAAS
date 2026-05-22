@@ -67,7 +67,7 @@ interface UiSlice {
 export type AppStore = AuthSlice & PlantSlice & TelemetrySlice & AlarmSlice & UiSlice;
 
 export const useAppStore = create<AppStore>()(
-  subscribeWithSelector((set, get) => ({
+  subscribeWithSelector((set) => ({
     // ── Auth ────────────────────────────────────────────────
     user: null,
     isAuthenticated: false,

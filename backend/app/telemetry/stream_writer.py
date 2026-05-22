@@ -8,8 +8,8 @@ from typing import List
 import structlog
 from redis.asyncio import Redis
 
-from .config import settings
-from .models import TelemetryPoint
+from app.config import settings
+from app.models import TelemetryPoint
 
 log = structlog.get_logger("historian.stream_writer")
 

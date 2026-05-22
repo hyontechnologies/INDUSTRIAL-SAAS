@@ -6,18 +6,18 @@ High-throughput ingestion, latest values, history, multi-history, stats, stale d
 import csv
 import io
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Any
 
 import asyncpg
 from fastapi import APIRouter, Depends, HTTPException, Query
 from starlette.responses import StreamingResponse
 
-from ..auth import Permission, require_permission, require_plant_access
-from ..config import settings
-from ..database import get_db
-from ..ingestion import ingest_telemetry_batch
-from ..models import TelemetryBatch, UserContext
-from ..tag_router import TagRouter
+from app.identity.auth import Permission, require_permission, require_plant_access
+from app.config import settings
+from app.infra.database import get_db
+from app.telemetry.ingestion import ingest_telemetry_batch
+from app.models import TelemetryBatch, UserContext
+from app.telemetry.tag_router import TagRouter
 
 router = APIRouter(prefix="/api/v1/telemetry", tags=["telemetry"])
 tag_router = TagRouter()
@@ -169,7 +169,7 @@ async def get_multi_history(
     else:
         agg_sql = f"{agg}(value)"
 
-    pivot = {}
+    pivot: dict[str, dict[str, Any]] = {}
 
     for tag_name in tag_list:
         rows = await conn.fetch(

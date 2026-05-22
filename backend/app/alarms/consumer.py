@@ -10,10 +10,10 @@ from typing import Dict, List, Any
 
 import structlog
 
-from .config import settings
+from app.config import settings
 from app.infra.database import get_write_pool
 from app.telemetry.stream_writer import redis_client
-from .models import TelemetryPoint, TagQuality
+from app.models import TelemetryPoint, TagQuality
 from app.alarms.engine import evaluate_alarms_for_batch, insert_alarms
 
 log = structlog.get_logger("historian.alarm_consumer")
@@ -50,7 +50,7 @@ async def process_alarms(batch_data: List[Dict[str, Any]]):
         return
 
     # Group by tenant and plant
-    groups = {}
+    groups: dict[tuple[str, str], list[TelemetryPoint]] = {}
 
     for row in batch_data:
         tenant_id = row["tenant_id"]

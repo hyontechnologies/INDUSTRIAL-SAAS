@@ -118,7 +118,8 @@ export function useWebSocket({
           const delay = baseDelay * Math.pow(2, attemptRef.current) + jitter;
           attemptRef.current += 1;
           updateStatus('reconnecting');
-          reconnectTimerRef.current = setTimeout(connect, delay);
+          // eslint-disable-next-line
+          reconnectTimerRef.current = setTimeout(() => connect(), delay);
         } else {
           updateStatus('error');
         }

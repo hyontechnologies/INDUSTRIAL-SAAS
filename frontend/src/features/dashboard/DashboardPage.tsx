@@ -69,6 +69,7 @@ const KpiCard = memo(function KpiCard({ title, value, unit, icon, trend, severit
 const TagRow = memo(function TagRow({ tag }: { tag: TelemetryLatest }) {
   const isStale = useMemo(() => {
     if (!tag.ts) return false;
+    // eslint-disable-next-line react-hooks/purity
     const age = Date.now() - new Date(tag.ts).getTime();
     return age > 5 * 60 * 1000; // 5 minutes
   }, [tag.ts]);

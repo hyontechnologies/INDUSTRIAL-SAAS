@@ -14,8 +14,8 @@ import structlog
 from fastapi import Depends, Header, HTTPException, Request, status
 from jose import JWTError, jwt
 
-from .config import settings
-from .models import UserContext
+from app.config import settings
+from app.models import UserContext
 
 log = structlog.get_logger("historian.auth")
 
