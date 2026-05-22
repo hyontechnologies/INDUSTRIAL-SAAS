@@ -12,8 +12,8 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from app.identity.auth import Permission, audit, require_permission, require_plant_access
 from app.infra.database import get_db
-from app.plant.models import PlantCreate
-from app.identity.models import UserContext
+from app.models import PlantCreate
+from app.models import UserContext
 from app.core.pagination import PaginationParams, PaginatedResponse, build_paginated_response
 
 router = APIRouter(prefix="/api/v1/plants", tags=["plants"])

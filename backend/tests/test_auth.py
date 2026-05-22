@@ -21,7 +21,7 @@ async def test_get_current_user_invalid_jwt():
 async def test_get_current_user_valid_api_key():
     request = AsyncMock()
 
-    with patch("app.auth._verify_edge_api_key_db", return_value="piccadily") as mock_verify:
+    with patch("app.identity.auth._verify_edge_api_key_db", return_value="piccadily") as mock_verify:
         user = await get_current_user(request, x_api_key="valid_raw_key")
         assert user.is_edge is True
         assert user.tenant_id == "piccadily"

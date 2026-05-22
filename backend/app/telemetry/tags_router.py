@@ -6,10 +6,10 @@ List, search, and upsert tag metadata with alarm threshold management.
 import asyncpg
 from fastapi import APIRouter, Depends, Query
 
-from ..alarms import evict_threshold_cache
-from ..auth import Permission, audit, require_permission, require_plant_access
-from ..database import get_db
-from ..models import TagMetadataUpdate, UserContext
+from app.alarms.engine import evict_threshold_cache
+from app.identity.auth import Permission, audit, require_permission, require_plant_access
+from app.infra.database import get_db
+from app.models import TagMetadataUpdate, UserContext
 
 router = APIRouter(prefix="/api/v1/tags", tags=["tags"])
 

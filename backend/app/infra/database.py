@@ -10,7 +10,7 @@ from typing import AsyncGenerator, Optional
 import asyncpg
 import structlog
 
-from .config import settings
+from app.config import settings
 
 log = structlog.get_logger("historian.database")
 
@@ -75,7 +75,7 @@ def get_write_pool() -> asyncpg.Pool:
 
 
 from app.identity.auth import get_current_user
-from .models import UserContext
+from app.models import UserContext
 from fastapi import Depends
 
 

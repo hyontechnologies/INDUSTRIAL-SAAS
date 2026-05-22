@@ -5,7 +5,7 @@ Redis connection pooling and utilities.
 import structlog
 from redis.asyncio import Redis
 
-from ..config import settings
+from app.config import settings
 
 log = structlog.get_logger("historian.redis")
 

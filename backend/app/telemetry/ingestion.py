@@ -11,8 +11,8 @@ import structlog
 from fastapi import HTTPException
 
 from app.telemetry.stream_writer import publish_batch_to_stream
-from .models import TelemetryBatch, UserContext
-from .config import settings
+from app.models import TelemetryBatch, UserContext
+from app.config import settings
 from app.infra.metrics import metrics, rate_limiter
 from app.realtime.broadcaster import ws_manager
 

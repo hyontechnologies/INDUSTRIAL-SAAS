@@ -11,7 +11,7 @@ from typing import Dict, List, Any, Tuple
 import asyncpg
 import structlog
 
-from .config import settings
+from app.config import settings
 from app.infra.database import get_write_pool
 from app.telemetry.stream_writer import redis_client
 from app.telemetry.tag_router import route_tag

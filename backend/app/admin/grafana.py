@@ -8,9 +8,9 @@ from datetime import datetime
 import asyncpg
 from fastapi import APIRouter, Depends, Request
 
-from ..auth import Permission, require_permission
-from ..database import get_db
-from ..models import UserContext
+from app.identity.auth import Permission, require_permission
+from app.infra.database import get_db
+from app.models import UserContext
 
 router = APIRouter(prefix="/grafana", tags=["grafana"], include_in_schema=False)
 

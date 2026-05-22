@@ -23,8 +23,8 @@ async def test_ingest_telemetry_batch_success(mock_db_conn, mock_user):
     )
 
     with (
-        patch("app.ingestion.rate_limiter.check", return_value=True),
-        patch("app.ingestion.publish_batch_to_stream") as mock_publish,
+        patch("app.telemetry.ingestion.rate_limiter.check", return_value=True),
+        patch("app.telemetry.ingestion.publish_batch_to_stream") as mock_publish,
     ):
         res = await ingest_telemetry_batch(mock_db_conn, batch, mock_user)
         assert res["inserted"] == 1

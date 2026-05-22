@@ -11,10 +11,10 @@ from typing import Dict, List, Optional, Tuple
 import asyncpg
 import structlog
 
-from .config import settings
-from .models import AlarmSeverity, TelemetryPoint, TagQuality
+from app.config import settings
+from app.models import AlarmSeverity, TelemetryPoint, TagQuality
 
-from .core.redis_keys import threshold_cache_key, alarm_cooldown_key
+from app.core.redis_keys import threshold_cache_key, alarm_cooldown_key
 
 log = structlog.get_logger("historian.alarms")
 
