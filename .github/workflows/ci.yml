@@ -1,4 +1,4 @@
-name: Piccadily CI
+name: Industrial Operations Cloud CI
 
 on:
   push:
@@ -15,12 +15,14 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Install Ruff
-        run: pip install ruff
+      - name: Install Ruff and Mypy
+        run: pip install ruff mypy
       - name: Run Ruff Linter
         run: ruff check backend/app
       - name: Run Ruff Formatter check
         run: ruff format --check backend/app
+      - name: Run Mypy Type Check
+        run: mypy backend/app --ignore-missing-imports
 
   lint-isolation:
     runs-on: ubuntu-latest
@@ -81,7 +83,7 @@ jobs:
           REDIS_URL: redis://localhost:6379/0
           ENVIRONMENT: test
 
-  build-frontend:
+  build-and-test-frontend:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -90,5 +92,9 @@ jobs:
           node-version: '20'
       - name: Install dependencies
         run: cd frontend && npm ci
+      - name: Run Frontend Linter (ESLint)
+        run: cd frontend && npm run lint
+      - name: Run Frontend Type Check (TypeScript)
+        run: cd frontend && npx tsc --noEmit
       - name: Build frontend
         run: cd frontend && npm run build

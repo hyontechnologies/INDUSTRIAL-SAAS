@@ -1,5 +1,5 @@
 import pytest
-from app.stream_writer import get_stream_key
+from app.telemetry.stream_writer import get_stream_key
 
 
 def test_stream_key_generation():
