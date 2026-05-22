@@ -50,7 +50,7 @@ async def process_alarms(batch_data: List[Dict[str, Any]]):
         return
 
     # Group by tenant and plant
-    groups = {}
+    groups: dict[tuple[str, str], list[TelemetryPoint]] = {}
 
     for row in batch_data:
         tenant_id = row["tenant_id"]

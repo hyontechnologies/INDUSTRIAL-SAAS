@@ -57,8 +57,8 @@ async def search_tags(
 @router.put("/{tag_name}")
 async def upsert_tag_metadata(
     tag_name: str,
+    payload: TagMetadataUpdate,
     plant_id: str = Query(...),
-    payload: TagMetadataUpdate = ...,
     user: UserContext = Depends(require_permission(Permission.METADATA_WRITE)),
     _=Depends(require_plant_access),
     conn: asyncpg.Connection = Depends(get_db),

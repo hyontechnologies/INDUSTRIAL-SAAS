@@ -6,7 +6,7 @@ High-throughput ingestion, latest values, history, multi-history, stats, stale d
 import csv
 import io
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Any
 
 import asyncpg
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -169,7 +169,7 @@ async def get_multi_history(
     else:
         agg_sql = f"{agg}(value)"
 
-    pivot = {}
+    pivot: dict[str, dict[str, Any]] = {}
 
     for tag_name in tag_list:
         rows = await conn.fetch(

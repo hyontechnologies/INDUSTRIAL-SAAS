@@ -6,6 +6,7 @@ CRUD operations for plants with tenant isolation.
 import asyncio
 import json
 from datetime import datetime, timezone
+from typing import Any
 
 import asyncpg
 from fastapi import APIRouter, Depends, HTTPException
@@ -28,7 +29,7 @@ async def list_plants(
     query = (
         "SELECT plant_id, name, location, plant_type, timezone, is_active, created_at FROM plants WHERE tenant_id=$1"
     )
-    params = [user.tenant_id]
+    params: list[Any] = [user.tenant_id]
 
     if user.plant_ids:
         query += " AND plant_id = ANY($2)"
