@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
 =============================================================================
-PICCADILY INDUSTRIAL HISTORIAN — OPC UA Edge Agent v3.0
+=============================================================================
+INDUSTRIAL OPERATIONS CLOUD — OPC UA Edge Agent v3.0
 Continuous subscription agent with SQLite state storage and batch uploader.
 =============================================================================
 """
@@ -31,12 +32,12 @@ except ImportError:
     _BaseHandler = object
 
 # ── Configuration ──────────────────────────────────────────────────────────
-OPCUA_ENDPOINT = os.getenv("OPC_URL", "opc.tcp://localhost:4840/piccadily/")
+OPCUA_ENDPOINT = os.getenv("OPC_URL", "opc.tcp://localhost:4840/industrial/")
 FASTAPI_ENDPOINT = os.getenv("VITE_API_URL", "http://localhost")  # Through Nginx port 80
-OPC_NS_URI = os.getenv("OPC_NS_URI", "urn:piccadily:boilerbridge")
-TENANT_ID = os.getenv("TENANT_ID", "piccadily")
-PLANT_ID = os.getenv("PLANT_ID", "BOILER_PLC_01")
-DEVICE_ID = os.getenv("DEVICE_ID", "BOILER_PLC_01")
+OPC_NS_URI = os.getenv("OPC_NS_URI", "urn:industrial:opcbridge")
+TENANT_ID = os.getenv("TENANT_ID", "default_tenant")
+PLANT_ID = os.getenv("PLANT_ID", "DEFAULT_PLANT_01")
+DEVICE_ID = os.getenv("DEVICE_ID", "DEFAULT_PLC_01")
 OPC_USERNAME = os.getenv("OPC_USER", "")
 OPC_PASSWORD = os.getenv("OPC_PASS", "")
 
@@ -123,7 +124,7 @@ async def init_db(path: str):
         await db.commit()
 
 
-class BoilerSubHandler(_BaseHandler):
+class UniversalSubHandler(_BaseHandler):
     def __init__(
         self, db_conn: aiosqlite.Connection, dedup: DedupWindow, node_meta: Dict[str, tuple], seq_counter: list
     ):
@@ -342,7 +343,7 @@ async def opc_client_task(
                     log.info("  Group %-20s : %3d tags", g, c)
 
                 async with aiosqlite.connect(db_path) as db:
-                    handler = BoilerSubHandler(db, dedup, node_meta, seq_ctr)
+                    handler = UniversalSubHandler(db, dedup, node_meta, seq_ctr)
                     sub = await client.create_subscription(PUB_INTERVAL_MS, handler)
 
                 # Subscribe in chunks of 50 to avoid network timeouts
@@ -376,7 +377,7 @@ async def opc_client_task(
 
 async def main():
     log.info("=" * 60)
-    log.info("  Piccadily OPC UA Edge Agent v3.0")
+    log.info("  Universal OPC UA Edge Agent v3.0")
     log.info("  Tenant ID   : %s", TENANT_ID)
     log.info("  Plant ID    : %s", PLANT_ID)
     log.info("  Device ID   : %s", DEVICE_ID)

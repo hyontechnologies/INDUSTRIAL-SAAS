@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     # ── App ──────────────────────────────────────────────────────────────────
-    APP_NAME: str = "Piccadily Industrial Historian"
+    APP_NAME: str = "Industrial Operations Cloud"
     APP_VERSION: str = "4.0.0"
     DEBUG: bool = False
     ENVIRONMENT: str = "production"
@@ -23,9 +23,10 @@ class Settings(BaseSettings):
         return self.ENVIRONMENT.lower() == "development"
 
     # ── Database ─────────────────────────────────────────────────────────────
-    DATABASE_URL: str = "postgresql://historian_user:historian_dev_password@localhost:5432/historian"
+    DATABASE_URL: str = "postgresql://postgres:postgres@localhost:5432/historian"
     DB_POOL_MIN: int = 2
-    DB_POOL_MAX: int = 8  # keep low on 4 GB RAM
+    DB_POOL_MAX: int = 8
+    DB_WRITE_POOL_MAX: int = 10  # keep low on 4 GB RAM
     DB_POOL_MAX_INACTIVE: float = 300.0
     DB_COMMAND_TIMEOUT: float = 30.0
     DB_CONNECT_RETRIES: int = 10  # startup retry attempts
@@ -43,7 +44,6 @@ class Settings(BaseSettings):
     # ── Tailscale ────────────────────────────────────────────────────────────
     TAILSCALE_ENABLED: bool = False
     TAILSCALE_CLOUD_HOSTNAME: str = "historian-cloud"
-    TAILSCALE_PLANT_HOSTNAME: str = "boiler-edge"
 
     # ── Supabase Auth ────────────────────────────────────────────────────────
     SUPABASE_JWT_SECRET: str = "supabase_test_jwt_secret_placeholder_for_ci"

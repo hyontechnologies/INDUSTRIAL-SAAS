@@ -6,7 +6,7 @@ import pytest
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, patch
 
-from app.alarms import evaluate_alarms_for_batch
+from app.alarms.engine import evaluate_alarms_for_batch
 from app.models import TelemetryPoint, TagQuality, AlarmSeverity
 
 

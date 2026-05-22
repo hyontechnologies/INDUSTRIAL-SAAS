@@ -1,5 +1,5 @@
 import pytest
-from app.tag_router import TagRouter
+from app.telemetry.tag_router import TagRouter
 
 
 class MockConn:

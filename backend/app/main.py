@@ -1,5 +1,5 @@
 """
-Piccadily Industrial Historian — FastAPI Application Factory
+Industrial Operations Cloud — FastAPI Application Factory
 Slim entry point: lifespan, middleware, router registration.
 """
 
@@ -14,14 +14,14 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse, PlainTextResponse
 
-from .alarms import evict_threshold_cache
-from .broadcaster import ws_manager
+from app.alarms.engine import evict_threshold_cache
+from app.realtime.broadcaster import ws_manager
 from .config import settings
-from .database import close_pools, create_pools, get_read_pool
-from .metrics import metrics
-from .stream_writer import init_redis_pool, close_redis_pool, redis_client
-from .stream_consumer import stream_consumer_worker
-from .alarm_consumer import alarm_consumer_worker
+from app.infra.database import close_pools, create_pools, get_read_pool
+from app.infra.metrics import metrics
+from app.telemetry.stream_writer import init_redis_pool, close_redis_pool, redis_client
+from app.telemetry.stream_consumer import stream_consumer_worker
+from app.alarms.consumer import alarm_consumer_worker
 
 # ── Structured logging setup ────────────────────────────────────────────────────
 structlog.configure(
@@ -39,8 +39,15 @@ structlog.configure(
 
 log = structlog.get_logger("historian.app")
 
-# ── Router imports ──────────────────────────────────────────────────────────────
-from .routers import admin, alarms, grafana, plants, tags, telemetry, websocket  # noqa: E402
+# ── Router imports ──────────────────────────────────────────────────────────────────
+from app.admin.router import router as admin_router
+from app.admin.grafana import router as grafana_router
+from app.alarms.router import router as alarms_router
+from app.plant.router import router as plants_router
+from app.telemetry.tags_router import router as tags_router
+from app.telemetry.router import router as telemetry_router
+from app.realtime.router import router as websocket_router
+from .core.observability import register_exception_handlers  # noqa: E402
 
 
 # ── Lifespan ────────────────────────────────────────────────────────────────────
@@ -101,6 +108,9 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# ── Register domain exception handlers ───────────────────────────────────────
+register_exception_handlers(app)
+
 
 # ── Middleware stack (applied in reverse order) ─────────────────────────────────
 app.add_middleware(GZipMiddleware, minimum_size=1024)
@@ -145,14 +155,15 @@ async def request_id_middleware(request: Request, call_next):
     return response
 
 
-# ── Register routers ────────────────────────────────────────────────────────────
-app.include_router(telemetry.router)
-app.include_router(alarms.router)
-app.include_router(tags.router)
-app.include_router(plants.router)
-app.include_router(admin.router)
-app.include_router(websocket.router)
-app.include_router(grafana.router)
+# ── Application Routing ─────────────────────────────────────────────────────────
+
+app.include_router(websocket_router, prefix="/api/v1/ws", tags=["websocket"])
+app.include_router(telemetry_router, prefix="/api/v1/telemetry", tags=["telemetry"])
+app.include_router(tags_router, prefix="/api/v1/tags", tags=["tags"])
+app.include_router(plants_router, prefix="/api/v1/plants", tags=["plants"])
+app.include_router(alarms_router, prefix="/api/v1/alarms", tags=["alarms"])
+app.include_router(admin_router, prefix="/api/v1/admin", tags=["admin"])
+app.include_router(grafana_router, prefix="/api/v1/grafana", tags=["grafana"])
 
 
 # ── Health & Metrics (not in routers — these are ops-only) ──────────────────────

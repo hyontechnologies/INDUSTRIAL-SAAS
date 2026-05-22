@@ -6,7 +6,7 @@ import pytest
 from datetime import datetime, timezone
 from unittest.mock import patch
 
-from app.ingestion import ingest_telemetry_batch
+from app.telemetry.ingestion import ingest_telemetry_batch
 from app.models import TelemetryBatch, TelemetryPoint, TagQuality
 
 

@@ -4,7 +4,7 @@ Verifies dynamic tag routing rules.
 """
 
 import pytest
-from app.tag_router import TagRouter, CATCH_ALL_TABLE, clear_cache
+from app.telemetry.tag_router import TagRouter, CATCH_ALL_TABLE, clear_cache
 
 
 class MockConn:

@@ -114,8 +114,8 @@ class PlantCreate(BaseModel):
     plant_id: str = Field(..., max_length=64)
     name: str = Field(..., max_length=128)
     location: Optional[str] = None
-    plant_type: str = Field(default="boiler")  # boiler | wtp | stp | power | utility
-    timezone: str = Field(default="Asia/Kolkata")
+    plant_type: str = "generic"
+    timezone: str = "UTC"
     config: Optional[dict] = None
 
 
