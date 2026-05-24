@@ -19,7 +19,7 @@ from app.realtime.broadcaster import ws_manager
 from app.config import settings
 from app.infra.database import close_pools, create_pools, get_read_pool
 from app.infra.metrics import metrics
-from app.telemetry.stream_writer import init_redis_pool, close_redis_pool, redis_client
+from app.infra.redis import init_redis_pool, close_redis_pool, get_redis
 from app.telemetry.stream_consumer import stream_consumer_worker
 from app.alarms.consumer import alarm_consumer_worker
 
@@ -183,8 +183,8 @@ async def health():
         pass
 
     try:
-        if redis_client:
-            await redis_client.ping()
+        if get_redis():
+            await get_redis().ping()
             redis_ok = True
     except Exception:
         pass

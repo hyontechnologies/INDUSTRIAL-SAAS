@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { useAppStore } from '../shared/stores/useAppStore';
 import { cn } from '../shared/utils/cn';
+import { useWebSocket } from '../shared/hooks/useWebSocket';
 
 const navItems = [
   { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
@@ -68,6 +69,19 @@ export function Layout() {
   const sidebarCollapsed = useAppStore((s) => s.sidebarCollapsed);
   const setSidebarCollapsed = useAppStore((s) => s.setSidebarCollapsed);
   const selectedPlantId = useAppStore((s) => s.selectedPlantId);
+
+  const user = useAppStore((s) => s.user);
+  const handleWsMessage = useAppStore((s) => s.handleWsMessage);
+  const setConnectionStatus = useAppStore((s) => s.setConnectionStatus);
+
+  useWebSocket({
+    tenantId: user?.tenant_id || 'piccadily',
+    plantId: selectedPlantId || 'BOILER_PLC_01',
+    apiKey: 'changeme',
+    onMessage: handleWsMessage,
+    onStatusChange: setConnectionStatus,
+    enabled: !!user,
+  });
 
   return (
     <div className="flex h-screen bg-slate-950 text-slate-50 font-sans overflow-hidden">

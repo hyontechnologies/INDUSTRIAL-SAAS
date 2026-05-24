@@ -6,15 +6,13 @@ Writes incoming telemetry batches to a Redis Stream for asynchronous processing.
 from typing import List
 
 import structlog
-from redis.asyncio import Redis
 
 from app.config import settings
 from app.models import TelemetryPoint
 
 log = structlog.get_logger("historian.stream_writer")
 
-# Global Redis client instance
-redis_client: Redis = None  # type: ignore
+from app.infra.redis import get_redis
 
 
 def get_stream_key(tenant_id: str, plant_id: str) -> str:
@@ -22,26 +20,6 @@ def get_stream_key(tenant_id: str, plant_id: str) -> str:
     if not tenant_id or not plant_id:
         raise ValueError("tenant_id and plant_id cannot be empty")
     return f"telemetry:{tenant_id}:{plant_id}"
-
-
-async def init_redis_pool():
-    """Initialize the global async Redis connection pool."""
-    global redis_client
-    redis_client = Redis.from_url(
-        settings.REDIS_URL,
-        decode_responses=True,
-        max_connections=20,
-    )
-    await redis_client.ping()
-    log.info("redis.pool_initialized", url=settings.REDIS_URL)
-
-
-async def close_redis_pool():
-    """Close the global Redis connection pool."""
-    global redis_client
-    if redis_client:
-        await redis_client.close()
-        log.info("redis.pool_closed")
 
 
 async def publish_batch_to_stream(
@@ -53,14 +31,14 @@ async def publish_batch_to_stream(
     Publish a batch of telemetry points to the Redis Stream.
     Uses pipelining for maximum throughput.
     """
-    if not redis_client:
+    if not get_redis():
         log.error("redis.not_initialized")
         raise RuntimeError("Redis client not initialized")
 
     stream_key = f"{settings.REDIS_STREAM_PREFIX}{tenant_id}:{plant_id}"
 
     # Use a pipeline to batch XADD commands
-    pipe = redis_client.pipeline(transaction=False)
+    pipe = get_redis().pipeline(transaction=False)
 
     for point in points:
         # Serialize the point payload (flattened for stream hash)

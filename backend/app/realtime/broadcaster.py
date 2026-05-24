@@ -11,7 +11,7 @@ from typing import Dict, Set, Tuple
 import structlog
 from fastapi import WebSocket
 
-from app.telemetry.stream_writer import redis_client
+from app.infra.redis import get_redis
 from app.core.redis_keys import ws_broadcast_channel
 
 log = structlog.get_logger("historian.broadcaster")
@@ -32,9 +32,9 @@ class ConnectionManager:
 
     async def start_pubsub(self):
         """Start background task to listen for Redis Pub/Sub broadcasts."""
-        if not redis_client:
+        if not get_redis():
             return
-        pubsub = redis_client.pubsub()
+        pubsub = get_redis().pubsub()
         await pubsub.psubscribe("ws|broadcast|*")
         self._pubsub_task = asyncio.create_task(self._listen_to_redis(pubsub))
         log.info("ws.pubsub_started")
@@ -76,9 +76,9 @@ class ConnectionManager:
         """
         Publish message to Redis Pub/Sub for all workers to receive.
         """
-        if redis_client:
+        if get_redis():
             channel = ws_broadcast_channel(tenant_id, plant_id)
-            await redis_client.publish(channel, json.dumps(message))
+            await get_redis().publish(channel, json.dumps(message))
         else:
             # Fallback to local if redis not initialized
             await self._local_fanout(tenant_id, plant_id, message)

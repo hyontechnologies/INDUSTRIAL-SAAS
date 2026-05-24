@@ -32,12 +32,12 @@ except ImportError:
     _BaseHandler = object
 
 # ── Configuration ──────────────────────────────────────────────────────────
-OPCUA_ENDPOINT = os.getenv("OPC_URL", "opc.tcp://localhost:4840/industrial/")
+OPCUA_ENDPOINT = os.getenv("OPC_URL", "opc.tcp://localhost:4840/piccadily/")
 FASTAPI_ENDPOINT = os.getenv("VITE_API_URL", "http://localhost")  # Through Nginx port 80
-OPC_NS_URI = os.getenv("OPC_NS_URI", "urn:industrial:opcbridge")
+OPC_NS_URI = os.getenv("OPC_NS_URI", "urn:piccadily:boilerbridge")
 TENANT_ID = os.getenv("TENANT_ID", "default_tenant")
-PLANT_ID = os.getenv("PLANT_ID", "DEFAULT_PLANT_01")
-DEVICE_ID = os.getenv("DEVICE_ID", "DEFAULT_PLC_01")
+PLANT_ID = os.getenv("PLANT_ID", "PICCADILY_PLANT_01")
+DEVICE_ID = os.getenv("DEVICE_ID", "BOILER_PLC_01")
 OPC_USERNAME = os.getenv("OPC_USER", "")
 OPC_PASSWORD = os.getenv("OPC_PASS", "")
 
@@ -66,7 +66,10 @@ log = logging.getLogger("EdgeAgent")
 logging.getLogger("asyncua").setLevel(logging.WARNING)
 
 # API URL maps to the FastAPI ingestion route via Nginx
-API_URL = f"{FASTAPI_ENDPOINT.rstrip('/')}/api/v1/telemetry/ingest"
+if FASTAPI_ENDPOINT.endswith("/api/v1"):
+    API_URL = f"{FASTAPI_ENDPOINT}/telemetry/ingest"
+else:
+    API_URL = f"{FASTAPI_ENDPOINT.rstrip('/')}/api/v1/telemetry/ingest"
 
 
 @dataclass
@@ -346,28 +349,28 @@ async def opc_client_task(
                     handler = UniversalSubHandler(db, dedup, node_meta, seq_ctr)
                     sub = await client.create_subscription(PUB_INTERVAL_MS, handler)
 
-                # Subscribe in chunks of 50 to avoid network timeouts
-                CHUNK = 50
-                for i in range(0, len(nodes_to_subscribe), CHUNK):
-                    chunk = nodes_to_subscribe[i : i + CHUNK]
-                    await sub.subscribe_data_change(chunk)
+                    # Subscribe in chunks of 50 to avoid network timeouts
+                    CHUNK = 50
+                    for i in range(0, len(nodes_to_subscribe), CHUNK):
+                        chunk = nodes_to_subscribe[i : i + CHUNK]
+                        await sub.subscribe_data_change(chunk)
 
-                log.info("=" * 60)
-                log.info("  ALL %d SUBSCRIPTIONS ACTIVE", len(nodes_to_subscribe))
-                log.info("=" * 60)
+                    log.info("=" * 60)
+                    log.info("  ALL %d SUBSCRIPTIONS ACTIVE", len(nodes_to_subscribe))
+                    log.info("=" * 60)
 
-                while not stop_event.is_set():
-                    await asyncio.sleep(30.0)
-                    good, bad, dup = handler.get_stats()
-                    log.info(
-                        "STATS | Good=%d | Bad=%d | Dedup=%d | Seq=%d",
-                        good,
-                        bad,
-                        dup,
-                        seq_ctr[0],
-                    )
+                    while not stop_event.is_set():
+                        await asyncio.sleep(30.0)
+                        good, bad, dup = handler.get_stats()
+                        log.info(
+                            "STATS | Good=%d | Bad=%d | Dedup=%d | Seq=%d",
+                            good,
+                            bad,
+                            dup,
+                            seq_ctr[0],
+                        )
 
-                await sub.delete()
+                    await sub.delete()
 
         except Exception as exc:
             log.error("OPC connection error: %s — retry in %.1fs", exc, retry_delay)

@@ -33,12 +33,12 @@ async def _get_thresholds(
     """Fetch alarm thresholds from DB (cached in Redis for ALARM_CACHE_TTL seconds).
     Returns None if tag has no thresholds configured — no alarm evaluation occurs."""
     import json
-    from app.telemetry.stream_writer import redis_client
+    from app.infra.redis import get_redis
 
     key = threshold_cache_key(tenant_id, plant_id, tag_name)
 
-    if redis_client:
-        cached = await redis_client.get(key)
+    if get_redis():
+        cached = await get_redis().get(key)
         if cached:
             return json.loads(cached)
 
@@ -56,8 +56,8 @@ async def _get_thresholds(
 
     if row:
         data = dict(row)
-        if redis_client:
-            await redis_client.set(key, json.dumps(data), ex=settings.ALARM_CACHE_TTL)
+        if get_redis():
+            await get_redis().set(key, json.dumps(data), ex=settings.ALARM_CACHE_TTL)
         return data
 
     # No DB thresholds configured — log a debug-level warning, return None (fail-safe)
@@ -67,13 +67,13 @@ async def _get_thresholds(
 
 async def _check_cooldown(tenant_id: str, plant_id: str, tag_name: str, severity: str) -> bool:
     """Returns True if alarm can fire (cooldown expired). False = suppressed."""
-    from app.telemetry.stream_writer import redis_client
+    from app.infra.redis import get_redis
 
-    if not redis_client:
+    if not get_redis():
         return True
 
     cd_key = alarm_cooldown_key(tenant_id, plant_id, tag_name, severity)
-    is_set = await redis_client.set(cd_key, "1", ex=settings.ALARM_COOLDOWN_SECONDS, nx=True)
+    is_set = await get_redis().set(cd_key, "1", ex=settings.ALARM_COOLDOWN_SECONDS, nx=True)
     return bool(is_set)
 
 
@@ -169,8 +169,8 @@ async def insert_alarms(conn: asyncpg.Connection, alarms: List[dict]) -> None:
 
 async def evict_threshold_cache(tenant_id: str, plant_id: str, tag_name: str):
     """Remove a single tag's threshold from cache (called on metadata update)."""
-    from app.telemetry.stream_writer import redis_client
+    from app.infra.redis import get_redis
 
-    if redis_client:
+    if get_redis():
         key = threshold_cache_key(tenant_id, plant_id, tag_name)
-        await redis_client.delete(key)
+        await get_redis().delete(key)

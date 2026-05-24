@@ -20,7 +20,7 @@ export default function LoginPage() {
       setTimeout(() => {
         setUser({
           user_id: 'local-dev-user',
-          tenant_id: 'default_tenant',
+          tenant_id: 'piccadily',
           email: email || 'operator@industrial.local',
           role: 'admin',
           plant_ids: [],

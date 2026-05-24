@@ -12,7 +12,7 @@ import structlog
 
 from app.config import settings
 from app.infra.database import get_write_pool
-from app.telemetry.stream_writer import redis_client
+from app.infra.redis import get_redis
 from app.models import TelemetryPoint, TagQuality
 from app.alarms.engine import evaluate_alarms_for_batch, insert_alarms
 
@@ -24,7 +24,7 @@ ALARM_CONSUMER_GROUP = "historian-alarms"
 async def setup_alarm_consumer_group(stream_key: str):
     """Ensure the alarm consumer group exists for a stream."""
     try:
-        await redis_client.xgroup_create(
+        await get_redis().xgroup_create(
             name=stream_key,
             groupname=ALARM_CONSUMER_GROUP,
             id="$",  # Start from newest messages
@@ -39,7 +39,7 @@ async def get_active_streams() -> List[str]:
     """Scan Redis for all telemetry streams."""
     streams = []
     pattern = f"{settings.REDIS_STREAM_PREFIX}*"
-    async for key in redis_client.scan_iter(match=pattern):
+    async for key in get_redis().scan_iter(match=pattern):
         streams.append(key)
     return streams
 
@@ -75,14 +75,12 @@ async def process_alarms(batch_data: List[Dict[str, Any]]):
 
     pool = get_write_pool()
     async with pool.acquire() as conn:
-        all_alarms = []
         for (tid, pid), pts in groups.items():
+            await conn.execute("SELECT set_config('app.current_tenant', $1, false)", tid)
             sweep_alarms = await evaluate_alarms_for_batch(conn, tid, pid, pts)
-            all_alarms.extend(sweep_alarms)
-
-        if all_alarms:
-            await insert_alarms(conn, all_alarms)
-            log.info("alarm_sweep.alarms_fired", count=len(all_alarms))
+            if sweep_alarms:
+                await insert_alarms(conn, sweep_alarms)
+                log.info("alarm_sweep.alarms_fired", count=len(sweep_alarms), tenant=tid, plant=pid)
 
 
 async def alarm_consumer_worker(worker_id: int):
@@ -107,7 +105,7 @@ async def alarm_consumer_worker(worker_id: int):
 
             streams_dict = {s: ">" for s in streams}
 
-            messages = await redis_client.xreadgroup(
+            messages = await get_redis().xreadgroup(
                 groupname=ALARM_CONSUMER_GROUP,
                 consumername=consumer_name,
                 streams=streams_dict,
@@ -127,7 +125,7 @@ async def alarm_consumer_worker(worker_id: int):
 
                 try:
                     await process_alarms(batch_data)
-                    await redis_client.xack(stream_name, ALARM_CONSUMER_GROUP, *msg_ids)
+                    await get_redis().xack(stream_name, ALARM_CONSUMER_GROUP, *msg_ids)
                 except Exception as e:
                     log.error("alarm_worker.process_failed", error=str(e), stream=stream_name)
 

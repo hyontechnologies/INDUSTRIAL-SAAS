@@ -66,7 +66,7 @@ class Settings(BaseSettings):
     STALE_TAG_MINUTES: int = 10  # tag not updated in N min → stale
 
     # ── Rate Limiting (in-memory, per tenant) ─────────────────────────────────
-    RATE_LIMIT_POINTS_PER_MIN: int = 5000  # telemetry points per tenant per minute
+    RATE_LIMIT_POINTS_PER_MIN: int = 500000  # telemetry points per tenant per minute
 
     @property
     def cors_origins_list(self) -> List[str]:

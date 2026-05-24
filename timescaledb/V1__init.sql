@@ -904,7 +904,7 @@ BEGIN
             'telemetry_control_valve', 'telemetry_digital_status', 'telemetry_performance',
             'telemetry_vibration', 'telemetry_power_metering', 'telemetry_raw',
             'telemetry_latest', 'alarms', 'audit_logs', 'tag_metadata',
-            'alarm_history', 'api_keys', 'plants'
+            'alarm_history', 'plants'
         ])
     LOOP
         -- Enable and Force RLS

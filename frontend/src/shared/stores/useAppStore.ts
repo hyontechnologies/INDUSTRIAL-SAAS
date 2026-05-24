@@ -35,7 +35,7 @@ interface PlantSlice {
 
 interface TelemetrySlice {
   latestValues: Record<string, TelemetryLatest>;
-  connectionStatus: 'connecting' | 'connected' | 'disconnected' | 'error';
+  connectionStatus: 'connecting' | 'connected' | 'reconnecting' | 'disconnected' | 'error';
   setConnectionStatus: (status: TelemetrySlice['connectionStatus']) => void;
   handleWsMessage: (msg: WsMessage) => void;
   clearTelemetry: () => void;

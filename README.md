@@ -5,189 +5,98 @@
 [![License](https://img.shields.io/badge/License-Apache%202.0-green.svg)](LICENSE)
 [![Platform Version](https://img.shields.io/badge/Version-v4.0.0--unified-orange)](CHANGELOG.md)
 
-Piccadily Industrial Historian is a high-performance, local-first, multi-tenant Industrial IoT SaaS platform designed to capture, archive, analyze, and visualize high-frequency time-series data. Specifically optimized to operate efficiently on single-host systems (e.g., a single 4GB RAM cloud VM), the platform merges high-speed industrial protocols with modern web interfaces.
+Welcome to the **Piccadily Industrial Historian** repository. This is a high-performance, local-first, multi-tenant Industrial IoT SaaS platform designed to capture, archive, analyze, and visualize high-frequency time-series data.
 
-Version 4.0 merges the React/Vite client and FastAPI backend into a **single, unified, multi-stage Docker container**, eliminating multi-port orchestration issues, improving network latency, and enabling seamless, relative routing for high-throughput time-series streaming.
-
-### ✨ What's New in the Latest Update
-* **Enhanced Security & Auth**: Implemented WebSocket Ticket Pattern for secure WebSocket connections without exposing JWTs in URLs. Added Redis-backed session tracking for JWT revocation and enforced strict Database existence checks on endpoints.
-* **Database & Ingestion Optimization**: Split `asyncpg` into dedicated read and write connection pools to prevent read-heavy queries from blocking real-time telemetry ingestion. Fixed alarm deduplication using deterministic UUIDs.
-* **Resilience & Safety**: Implemented Redis Stream PEL (Pending Entries List) recovery on startup to claim messages from potentially dead consumers. Added explicit allowlist validation for telemetry endpoint intervals.
-* **DevOps Clean-Up**: Removed legacy monolithic files, renamed schema initializers, and updated CI/CD pipelines to ensure Docker deployments depend strictly on CI success.
+This README provides a structured, step-by-step overview of the entire codebase so you can understand how the system is built, how data flows, and how to operate it.
 
 ---
 
-## 🏗️ System Architecture
+## Step 1: The Unified Architecture
 
+The system uses a Unified Docker Architecture. The React/Vite client and FastAPI backend are built into a **single, unified, multi-stage Docker container**. This eliminates multi-port orchestration issues, improves network latency, and enables seamless relative routing.
+
+### Key Components
+- **Frontend**: React (v19), Vite (v8), Tailwind CSS, shadcn/ui.
+- **Backend**: FastAPI (v0.111), Uvicorn, asyncpg.
+- **Database**: TimescaleDB (PostgreSQL 15) with 15 specialized hypertables.
+- **Queue**: Redis 7 for high-speed buffering (Redis Streams) and Pub/Sub.
+- **Edge Collection**: Resilient Python Edge Agent with SQLite Store-and-Forward.
+
+---
+
+## Step 2: The Domain-Driven Backend (FastAPI)
+
+The backend (`backend/app/`) is architected using Domain-Driven Design (DDD). It is modularized into distinct bounded contexts:
+
+1. **`core/`**: Central utilities including exceptions, custom pagination classes, and OpenTelemetry observability.
+2. **`identity/`**: Handles Dual-Authentication (Supabase JWT for UI users, SHA-256 API Keys for Edge Agents). Also manages RBAC (Role-Based Access Control).
+3. **`plant/`**: Manages the multi-tenant physical hierarchy (Tenants -> Plants -> Assets).
+4. **`telemetry/`**: The heart of the ingestion engine. It validates data, pushes to Redis Streams (`stream_writer.py`), and runs background tasks to bulk-insert into TimescaleDB (`stream_consumer.py`).
+5. **`alarms/`**: A background Redis consumer (`engine.py`) that evaluates live telemetry against pre-configured thresholds and generates deterministic alarms.
+6. **`realtime/`**: Manages high-performance WebSocket fanout (`broadcaster.py`) using Redis Pub/Sub to push data to active browser clients.
+7. **`infra/`**: Houses the global connection pools for TimescaleDB and Redis (`database.py`, `redis.py`), and tracks internal Prometheus metrics.
+
+---
+
+## Step 3: The Feature-Based Frontend (React + Vite)
+
+The frontend (`frontend/src/`) is an enterprise Single Page Application (SPA) utilizing a feature-driven architecture:
+
+1. **`app/`**: Contains the global application layout, routing configuration (React Router v7), and centralized Context providers.
+2. **`features/`**: Code is isolated by domain.
+   - **`dashboard/`**: Overview metrics, recent alarms, and plant summaries.
+   - **`telemetry/`**: Real-time rendering of tags using high-performance Apache ECharts and Recharts.
+   - **`alarms/`**: Data tables for acknowledged and unacknowledged alarms.
+   - **`identity/`**: Login components and session management.
+3. **`shared/`**: Reusable components (buttons, dialogs, charts), API clients (`axios`), and global Zustand state stores.
+
+The frontend uses zero-config relative networking (`fetch("/api/v1/...")`), meaning it works seamlessly behind the unified container's Nginx gateway.
+
+---
+
+## Step 4: The Data Ingestion Pipeline
+
+Data flows from the factory floor to the cloud via a highly resilient pipeline:
+
+1. **The Edge Agent (`edge-agent/`)**: Connects to on-premise OPC UA servers (or our local `plant_simulator`). It subscribes to tag changes and buffers them in a local SQLite Write-Ahead Log (WAL) database.
+2. **Store and Forward**: If the internet goes down, the Edge Agent continues spooling to disk. When the connection returns, it uploads data in batches.
+3. **Redis Buffering**: The backend accepts HTTP POST requests and immediately writes them to a Redis Stream (`XADD`) for durability, returning a `202 Accepted` to the Agent.
+4. **TimescaleDB Bulk Insert**: Background Uvicorn workers pull from Redis Streams and use `asyncpg` binary `COPY` to insert thousands of points into TimescaleDB in microseconds, enforcing Row-Level Security (`SET set_config('app.current_tenant', ...)`).
+
+---
+
+## Step 5: How to Run the Platform
+
+### Running the Unified Production Container
+The easiest way to run the historian is to pull the pre-compiled unified image from the GitHub Container Registry:
+
+```bash
+docker pull ghcr.io/hyontechnologies/industrial-telemetry-platform-init-unified:latest
+
+docker run -d -p 8000:8000 \
+  -e ENVIRONMENT=production \
+  -e DB_PASSWORD=your_secure_password \
+  -e SUPABASE_JWT_SECRET=your_jwt_secret \
+  ghcr.io/hyontechnologies/industrial-telemetry-platform-init-unified:latest
 ```
-                                 ┌────────────────────────────────────────────────────────┐
-                                 │                 Industrial Edge (PLC)                  │
-                                 │                                                        │
-  ┌──────────────┐  Modbus TCP   │ ┌──────────────┐    OPC UA      ┌──────────────┐       │
-  │  Piccadily   │──────────────>│ │    OPC UA    │───────────────>│  Edge Agent  │       │
-  │ Boiler Sim   │               │ │    Bridge    │                │ (SQLite WAL) │       │
-  └──────────────┘               │ └──────────────┘                └──────────────┘       │
-                                 └────────────────────────────────────────┬───────────────┘
-                                                                          │ HTTP Ingest (Nginx Proxy)
-                                                                          ▼ (Port 80/443)
-                                 ┌────────────────────────────────────────────────────────┐
-                                 │              Unified Web App Container                 │
-                                 │                                                        │
-                                 │                     Nginx Gateway                      │
-                                 │                 (Rate Limit & SSL)                     │
-                                 │                           │                            │
-                                 │                           ▼                            │
-                                 │               FastAPI (Uvicorn Workers)                │
-                                 │              ├─ Serve API routes                       │
-                                 │              ├─ Stream WebSockets                      │
-                                 │              └─ Serve React Static Assets (SPA)        │
-                                 │                           │                            │
-                                 │        ┌──────────────────┴──────────────────┐         │
-                                 │        ▼ (XADD to Stream)                    ▼         │
-                                 │   Redis 7 Ingest Buffer                 TimescaleDB    │
-                                 │   (Stream Consumer Groups)              (15 Hypertables)
-                                 └────────────────────────────────────────────────────────┘
-```
+Visit `http://localhost:8000` to access the application.
 
----
+### Running Local Development
+To run the full stack locally (including TimescaleDB, Redis, Grafana, and hot-reloading components):
 
-## 🛠️ Framework-by-Framework Implementation Details
-
-Every component of the Piccadily Historian has been engineered from the ground up to support high-frequency telemetry, low-latency client visualization, and absolute security:
-
-### 1. Frontend Client: React (v19) + Vite (v8) + TS (v6)
-* **Glassmorphism UI**: Built with a sleek, premium dark theme tailored for operations rooms. Styling is managed via Tailwind CSS v3.4 and PostCSS, incorporating responsive grids, layout backdrops, and active status animations.
-* **Vibrant Visualizations**:
-  * **Apache ECharts**: Renders dynamic radial gauges with threshold alerts for steam drum levels, feed water temperatures, and furnace drafts.
-  * **Recharts**: Renders real-time, scrolling double-area charts representing complex variables like superheater outlets and speeds.
-* **Zero-Config Relative Networking**: Configured with a relative path architecture (`fetch("/api/v1/...")` and `new WebSocket("ws://" + window.location.host + "/api/v1/ws/...")`). This automatically inherits the protocol, domain, and port of the host window.
-* **SPA Routing Stability**: Integrates client-side React Router navigation. When pages (such as `/alarms` or `/dashboard`) are reloaded, the host FastAPI server gracefully falls back to `index.html` to prevent browser 404 errors.
-
-### 2. Application Server: FastAPI (v0.111) + Uvicorn (v0.30)
-* **Asynchronous Lifespan**: Starts database connections, Redis streams, pub/sub listeners, and runs separate concurrent background tasks on startup, draining them gracefully during container teardown.
-* **Uvicorn Optimization**: Configured to run with `uvloop` (high-performance event loop written in Cython) and `httptools` (fast HTTP parser), operating behind multiple workers.
-* **Token Bucket Rate-Limiter**: Features custom sliding-window rate-limiting at the HTTP layer, preventing denial-of-service from misconfigured edge devices.
-* **Dual Authentication Core**: Authenticates REST requests using standard `Authorization: Bearer <JWT>` headers for dashboard users, and `X-API-Key` headers for machine-to-machine agents. WebSocket connections authenticate instantly via query parameters.
-* **Permissions-Based RBAC**: Enforces modular access control utilizing a `Permission` enum mapped to viewer, operator, engineer, and administrator roles.
-
-### 3. Queue Buffer: Redis (v7-Alpine)
-* **Ingest Buffer (Redis Streams)**: Ingest routes execute high-speed `XADD` operations to push telemetry batches to Redis, returning an immediate HTTP `202 Accepted` response.
-* **Stream Consumer Group Workers**: Two background worker threads read from the stream via `XREADGROUP`, chunking messages, executing DB writes, and sending acknowledgments (`XACK`).
-* **Pub/Sub Fanout**: A pub/sub broker handles client-specific channels, fanning out live telemetry instantly to all active WebSocket connections across different Uvicorn processes.
-* **Metrics Ingestion Tracker**: Exposes Redis stream lengths and pending counts under `/health` and Prometheus formats.
-
-### 4. Database Layer: TimescaleDB (PostgreSQL 15)
-* **Per-Group Hypertables (15 Tables)**: Replaced a single monolithic table with 15 specialized hypertables organized by tag group (e.g., `telemetry_temperature`, `telemetry_pressure`, `telemetry_flow_totalizer`).
-* **Storage Compression & Retention**:
-  * High-frequency tables are compressed after 7 days and deleted after 1 year.
-  * Long-term totalizers (`telemetry_flow_totalizer`) are compressed after 30 days and retained for 5 years.
-* **Binary Ingestion (asyncpg COPY)**: Background consumers bypass standard SQL `INSERT` structures, utilizing the high-speed PostgreSQL binary `COPY` protocol via `asyncpg` to load massive data chunks in microseconds.
-* **Row-Level Security (RLS)**: Enforced across all tenant tables. Every query queries the DB using active session variables (`SET app.current_tenant`), isolating tenant data at the storage layer.
-
-### 5. Resilient Collector: Edge Agent (Python + SQLite)
-* **OPC UA Core**: Connects securely to on-site OPC UA servers and subscribes to tag changes.
-* **SQLite Store-and-Forward**: Injects data into a local `buffer.db` SQLite database using Write-Ahead Logging (WAL) first.
-* **Loss-of-Link Resiliency**: If connection to the cloud backend is lost, data continues spooling to disk. Once connection is restored, a background spooler replays data sequentially with exponential backoff retry.
-
----
-
-## 🏗️ Architectural Gaps & Production Recommendations
-
-While version 4.0.0 represents a production-grade historian, the following items represent current architecture gaps to address before enterprise scaling:
-
-1. **Active-Active Redis High Availability**: Currently runs a single Redis node. In production, this should be transitioned to a Redis Sentinel or Redis Cluster setup to ensure continuous queue buffering.
-2. **Cold-Path Object Storage Archiving (Data Lake)**: Ingested data remains in TimescaleDB indefinitely based on retention. Integrating a cold-path archiver that dumps old data into compressed Parquet files on AWS S3 or Azure Blob Storage would cut database storage costs.
-3. **OPC UA Certificate Management**: The Edge Agent currently uses basic username/password auth. Enforcing strict PKI certificate-based validation for all edge-to-bridge integrations is recommended.
-4. **SSO Identity Provider (OIDC)**: While Supabase JWT auth is fully implemented, enterprise deployments should wire FastAPI auth routes directly to corporate identity systems like Okta, Keycloak, or Active Directory.
-5. **Continuous Aggregate Aggregation for Per-Group Tables**: Continuous aggregates are provisioned on `telemetry_raw`. Creating specialized materializations for core groups (e.g., flow, rpm, voltage) would optimize large-scale analytical reports.
-
----
-
-## 🚀 Recent Refactoring (Phases 1-3)
-
-We recently modernized the codebase from a flat prototype to a Domain-Driven enterprise structure:
-- **Modular Backend**: Extracted `app/` monolithic structure into bounded contexts (`identity`, `plant`, `telemetry`, `alarms`, `realtime`, `admin`, `infra`).
-- **Resilient WebSockets**: Migrated from sequential broadcasting to parallel `asyncio.gather()` fanout, preventing head-of-line blocking by slow clients.
-- **Frontend Rewrite**: Replaced the 1000-line God-component (`App.tsx`) with a scalable `src/features/` architecture powered by React Router v7, Zustand, and shadcn/ui.
-- **Performance**: Integrated a strict 10K-bounded LRU cache for tag routing and Cursor-Based Pagination for heavy REST APIs.
-- **Strict Code Maintenance**: CI/CD pipeline enforces `mypy` strict typing, `ruff` checks, frontend `eslint`, and `tsc` transpilation validations.
-
----
-
-## 📁 Repository Structure
-
-```
-.
-📂 .github/workflows/         # GitHub Actions (CI strict tests & Deploy Builder)
-📂 backend/                   # FastAPI Backend
-  📂 app/                   # Domain-Driven Core (identity, alarms, telemetry, etc.)
-  📂 tests/                 # Integration and unit pytest suite
-  📄 Dockerfile             # Backend API Dockerfile
-📂 frontend/                  # React TS + Vite source code (bundled inside Docker)
-📂 edge-agent/                # Edge OPC UA collector & Universal Sub Handler
-📂 plant_simulator/           # Local Edge PLC Simulators & Utilities
-📂 timescaledb/               # TimescaleDB initialization schemas & seed data
-📂 nginx/                     # Gateway Nginx reverse proxy configuration
-📄 api_integration_guide.md   # Specialized guide for frontend and custom clients
-📄 docker-compose.yml         # Dev Docker orchestration file
-```
-
----
-
-## 🔌 Frontend Engineer Quickstart & Docker Guide
-
-If you are a front-end or integrations engineer looking to run the entire backend stack locally and connect your custom front-end interface, follow these steps.
-
-### 1. Downloading the Dockerfile from a Release
-To let your team download the production `Dockerfile` or compose files without pulling the whole repository, they can fetch them directly from the **GitHub Releases** page or query them using standard HTTP requests:
-
-* **Download via Raw URL**:
-  ```bash
-  curl -sSL https://raw.githubusercontent.com/hyontechnologies/industrial-telemetry-platform-init/main/backend/Dockerfile -o Dockerfile
-  ```
-* **Download via GitHub CLI**:
-  ```bash
-  gh release download v4.0.0-unified -p "Dockerfile"
-  ```
-
-### 2. Pulling and Running the Pre-Built Unified Container (GHCR)
-Our CI/CD pipeline pushes the compiled web container containing **both the APIs and React frontend** directly to the GitHub Container Registry. You can run it instantly without compiling code:
-
-1. **Pull the latest image**:
+1. **Configure Environment:**
    ```bash
-   docker pull ghcr.io/hyontechnologies/industrial-telemetry-platform-init-unified:latest
+   cp .env.example .env
    ```
-2. **Run the entire stack in one command**:
+2. **Start Docker Compose:**
    ```bash
-   docker run -d -p 8000:8000 \
-     -e ENVIRONMENT=production \
-     -e DB_PASSWORD=your_secure_password \
-     -e SUPABASE_JWT_SECRET=your_jwt_secret \
-     ghcr.io/hyontechnologies/industrial-telemetry-platform-init-unified:latest
+   docker compose up -d --build
    ```
-3. Open your browser to [http://localhost:8000](http://localhost:8000). The React App will render, communicating seamlessly with the APIs and WebSockets running on that same port.
+3. **Start the Edge Simulator (optional):**
+   ```bash
+   python plant_simulator/run_externals.py
+   ```
+   This will start generating simulated boiler data and pushing it into your local backend.
 
 ---
-
-## ⚡ Development & Local Orchestration
-
-If you want to run the full historian stack, including TimescaleDB, Redis, and Nginx locally:
-
-### 1. copy configuration files
-Copy the environment template and configure your local parameters:
-```bash
-cp .env.example .env
-```
-
-### 2. Launch Local Containers
-Start the infrastructure (Postgres, Redis, API + Static Files, Nginx, Grafana):
-```bash
-docker compose up -d --build
-```
-
-### 3. Launch Local Edge Simulator
-To run the OPC UA bridge, boiler simulator, and the SQLite resilient Edge Agent:
-```bash
-python run_externals.py
-```
-Data will automatically begin flowing from the local simulator, buffering inside `buffer.db`, and uploading into the local container stack!
+*Built with ❤️ for Industrial Operations.*
