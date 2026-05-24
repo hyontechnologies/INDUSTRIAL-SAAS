@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import React, { Suspense } from 'react';
 import { createBrowserRouter, Navigate, useRouteError } from 'react-router-dom';
 import { Layout } from './layout';
@@ -50,13 +51,14 @@ function ErrorBoundary() {
   );
 }
 
-// Suspense wrapper helper
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const withSuspense = (Component: React.LazyExoticComponent<any>) => (
   <Suspense fallback={<PageLoader />}>
     <Component />
   </Suspense>
 );
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const router = createBrowserRouter([
   {
     path: '/login',
