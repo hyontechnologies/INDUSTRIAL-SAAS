@@ -66,7 +66,10 @@ log = logging.getLogger("EdgeAgent")
 logging.getLogger("asyncua").setLevel(logging.WARNING)
 
 # API URL maps to the FastAPI ingestion route via Nginx
-API_URL = f"{FASTAPI_ENDPOINT.rstrip('/')}/api/v1/telemetry/ingest"
+if FASTAPI_ENDPOINT.endswith("/api/v1"):
+    API_URL = f"{FASTAPI_ENDPOINT}/telemetry/ingest"
+else:
+    API_URL = f"{FASTAPI_ENDPOINT.rstrip('/')}/api/v1/telemetry/ingest"
 
 
 @dataclass
