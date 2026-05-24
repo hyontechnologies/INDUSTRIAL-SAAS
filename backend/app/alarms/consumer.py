@@ -75,14 +75,12 @@ async def process_alarms(batch_data: List[Dict[str, Any]]):
 
     pool = get_write_pool()
     async with pool.acquire() as conn:
-        all_alarms = []
         for (tid, pid), pts in groups.items():
+            await conn.execute("SELECT set_config('app.current_tenant', $1, false)", tid)
             sweep_alarms = await evaluate_alarms_for_batch(conn, tid, pid, pts)
-            all_alarms.extend(sweep_alarms)
-
-        if all_alarms:
-            await insert_alarms(conn, all_alarms)
-            log.info("alarm_sweep.alarms_fired", count=len(all_alarms))
+            if sweep_alarms:
+                await insert_alarms(conn, sweep_alarms)
+                log.info("alarm_sweep.alarms_fired", count=len(sweep_alarms), tenant=tid, plant=pid)
 
 
 async def alarm_consumer_worker(worker_id: int):

@@ -92,6 +92,8 @@ async def websocket_stream(
         # Send current snapshot from telemetry_latest
         pool = get_read_pool()
         async with pool.acquire() as conn:
+            # IMPORTANT: Bypass RLS for this specific query, or set the tenant correctly
+            await conn.execute("SELECT set_config('app.current_tenant', $1, false)", tenant_id)
             rows = await conn.fetch(
                 "SELECT tag_name, value, quality, ts, unit FROM telemetry_latest WHERE tenant_id=$1 AND plant_id=$2",
                 tenant_id,
