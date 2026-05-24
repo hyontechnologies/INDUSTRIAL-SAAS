@@ -82,7 +82,7 @@ from fastapi import Depends
 async def get_db(user: UserContext = Depends(get_current_user)) -> AsyncGenerator[asyncpg.Connection, None]:
     """FastAPI dependency — yields a connection from the pool with RLS tenant set."""
     async with get_read_pool().acquire() as conn:
-        await conn.execute("SET app.current_tenant = $1", user.tenant_id)
+        await conn.execute("SELECT set_config('app.current_tenant', $1, false)", user.tenant_id)
         try:
             yield conn
         finally:

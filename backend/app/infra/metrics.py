@@ -7,8 +7,6 @@ import time
 from collections import defaultdict
 from typing import Dict
 
-from app.realtime.broadcaster import ws_manager
-
 
 class RateLimiter:
     """Sliding-window counter — per-tenant points-per-minute enforcement."""
@@ -18,9 +16,9 @@ class RateLimiter:
 
     async def check(self, tenant_id: str, count: int) -> bool:
         """Returns True if request is within limit, False if it exceeds."""
-        from app.telemetry.stream_writer import redis_client
+        from app.infra.redis import get_redis
 
-        if not redis_client:
+        if not get_redis():
             return True  # Fallback if redis is not ready
 
         window_seconds = 60
@@ -28,21 +26,21 @@ class RateLimiter:
         key = f"ratelimit:{tenant_id}:{now_bucket}"
 
         # We need to increment by `count`, not just 1, since the user uploads batches of points.
-        current_count = await redis_client.incrby(key, count)
+        current_count = await get_redis().incrby(key, count)
         if current_count == count:  # First time creating the key
-            await redis_client.expire(key, window_seconds * 2)
+            await get_redis().expire(key, window_seconds * 2)
 
         return current_count <= self._limit
 
     async def current(self, tenant_id: str) -> int:
-        from app.telemetry.stream_writer import redis_client
+        from app.infra.redis import get_redis
 
-        if not redis_client:
+        if not get_redis():
             return 0
         window_seconds = 60
         now_bucket = int(time.monotonic()) // window_seconds
         key = f"ratelimit:{tenant_id}:{now_bucket}"
-        val = await redis_client.get(key)
+        val = await get_redis().get(key)
         return int(val) if val else 0
 
 
@@ -70,6 +68,8 @@ class IngestionMetrics:
         self._tenant_counts[tenant_id] += points
 
     def prometheus_text(self) -> str:
+        from app.realtime.broadcaster import ws_manager
+
         lines = [
             "# HELP historian_points_total Total telemetry points ingested",
             "# TYPE historian_points_total counter",

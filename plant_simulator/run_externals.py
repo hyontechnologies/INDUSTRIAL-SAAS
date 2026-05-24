@@ -38,7 +38,7 @@ def main():
     # 1. Start Modbus Simulator
     print(f"\n{GREEN}[SYSTEM]{RESET} Starting Modbus Simulator (PLC)...")
     sim_proc = subprocess.Popen(
-        [sys.executable, "-u", "piccadily_boiler_simulator.py", "--port", "5022"],
+        [sys.executable, "-u", "plant_simulator/piccadily_boiler_simulator.py", "--port", "5022"],
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
     )
@@ -51,7 +51,9 @@ def main():
     # 2. Start OPC UA Bridge
     print(f"\n{BLUE}[SYSTEM]{RESET} Starting OPC UA Bridge...")
     bridge_proc = subprocess.Popen(
-        [sys.executable, "-u", "piccadily_opcua_bridge.py"], stdout=subprocess.PIPE, stderr=subprocess.STDOUT
+        [sys.executable, "-u", "plant_simulator/piccadily_opcua_bridge.py"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
     )
     processes.append((bridge_proc, "BRIDGE", BLUE))
     threading.Thread(target=log_stream, args=(bridge_proc, "BRIDGE", BLUE), daemon=True).start()

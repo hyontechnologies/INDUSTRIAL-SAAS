@@ -47,12 +47,12 @@ async def revoke_session(
     user: UserContext = Depends(require_permission(Permission.ADMIN_USERS)),
     conn: asyncpg.Connection = Depends(get_db),
 ):
-    from app.telemetry.stream_writer import redis_client
+    from app.infra.redis import get_redis
 
-    if not redis_client:
+    if not get_redis():
         raise HTTPException(status_code=503, detail="Redis unavailable")
 
-    await redis_client.set(f"revoked:session:{payload.session_id}", "1", ex=7 * 86400)
+    await get_redis().set(f"revoked:session:{payload.session_id}", "1", ex=7 * 86400)
     await audit(conn, user, "REVOKE_SESSION", payload.session_id)
     return {"message": f"Session {payload.session_id} revoked"}
 

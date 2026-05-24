@@ -13,6 +13,10 @@ log = structlog.get_logger("historian.redis")
 redis_client: Redis = None  # type: ignore
 
 
+def get_redis() -> Redis:
+    return redis_client
+
+
 async def init_redis_pool():
     """Initialize the global async Redis connection pool."""
     global redis_client

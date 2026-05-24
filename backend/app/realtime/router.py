@@ -24,16 +24,16 @@ async def generate_ws_ticket(user: UserContext = Depends(require_permission(Perm
     Generate a short-lived, single-use ticket for WebSocket authentication.
     This prevents passing JWTs in query parameters (which leak in Nginx logs).
     """
-    from app.telemetry.stream_writer import redis_client
+    from app.infra.redis import get_redis
 
-    if not redis_client:
+    if not get_redis():
         raise HTTPException(status_code=503, detail="Redis unavailable")
 
     ticket = secrets.token_urlsafe(32)
     user_data = user.model_dump()
 
     # Store ticket for 30 seconds
-    await redis_client.set(f"ws:ticket:{ticket}", json.dumps(user_data), ex=30)
+    await get_redis().set(f"ws:ticket:{ticket}", json.dumps(user_data), ex=30)
     return {"ticket": ticket}
 
 
@@ -59,18 +59,18 @@ async def websocket_stream(
             await websocket.close(code=4401)
             return
     elif ticket:
-        from app.telemetry.stream_writer import redis_client
+        from app.infra.redis import get_redis
 
-        if not redis_client:
+        if not get_redis():
             await websocket.close(code=1011, reason="Redis unavailable")
             return
 
-        data = await redis_client.get(f"ws:ticket:{ticket}")
+        data = await get_redis().get(f"ws:ticket:{ticket}")
         if not data:
             await websocket.close(code=4401, reason="Invalid or expired ticket")
             return
 
-        await redis_client.delete(f"ws:ticket:{ticket}")
+        await get_redis().delete(f"ws:ticket:{ticket}")
 
         user_dict = json.loads(data)
         t_id = user_dict.get("tenant_id")

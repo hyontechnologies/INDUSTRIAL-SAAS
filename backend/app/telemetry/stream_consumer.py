@@ -13,7 +13,7 @@ import structlog
 
 from app.config import settings
 from app.infra.database import get_write_pool
-from app.telemetry.stream_writer import redis_client
+from app.infra.redis import get_redis
 from app.telemetry.tag_router import route_tag
 
 log = structlog.get_logger("historian.stream_consumer")
@@ -24,7 +24,7 @@ CONSUMER_GROUP = "historian-writers"
 async def setup_consumer_group(stream_key: str):
     """Ensure the consumer group exists for a stream."""
     try:
-        await redis_client.xgroup_create(
+        await get_redis().xgroup_create(
             name=stream_key,
             groupname=CONSUMER_GROUP,
             id="$",  # Start from newest messages
@@ -44,7 +44,7 @@ async def get_active_streams() -> List[str]:
     # For a single plant with one tenant, KEYS is fine, but we'll use scan_iter.
     streams = []
     pattern = f"{settings.REDIS_STREAM_PREFIX}*"
-    async for key in redis_client.scan_iter(match=pattern):
+    async for key in get_redis().scan_iter(match=pattern):
         streams.append(key)
     return streams
 
@@ -96,7 +96,7 @@ async def write_to_timescaledb(pool: asyncpg.Pool, batches: List[Dict[str, Any]]
                 latest_updates[key] = (ts, tenant_id, plant_id, tag_name, val, bool_val, quality, unit)
 
         async with pool.acquire() as conn:
-            await conn.execute("SET app.current_tenant = $1", tenant_id)
+            await conn.execute("SELECT set_config('app.current_tenant', $1, false)", tenant_id)
             try:
                 async with conn.transaction():
                     for table_name, rows in table_groups.items():
@@ -165,7 +165,7 @@ async def stream_consumer_worker(worker_id: int):
             log.info("worker.pel_recovery_start", worker_id=worker_id)
             streams_dict_0 = {s: "0" for s in streams}
             while True:
-                messages = await redis_client.xreadgroup(
+                messages = await get_redis().xreadgroup(
                     groupname=CONSUMER_GROUP,
                     consumername=consumer_name,
                     streams=streams_dict_0,
@@ -184,7 +184,7 @@ async def stream_consumer_worker(worker_id: int):
                     msg_ids = [msg_id for msg_id, _ in stream_messages]
                     try:
                         await write_to_timescaledb(pool, batch_data)
-                        await redis_client.xack(stream_name, CONSUMER_GROUP, *msg_ids)
+                        await get_redis().xack(stream_name, CONSUMER_GROUP, *msg_ids)
                         log.info("worker.pel_recovered", stream=stream_name, count=len(msg_ids))
                     except Exception as e:
                         log.error("worker.pel_write_failed", error=str(e), stream=stream_name)
@@ -212,7 +212,7 @@ async def stream_consumer_worker(worker_id: int):
             streams_dict = {s: ">" for s in streams}
 
             # XREADGROUP GROUP group consumer STREAMS stream1 stream2 > >
-            messages = await redis_client.xreadgroup(
+            messages = await get_redis().xreadgroup(
                 groupname=CONSUMER_GROUP,
                 consumername=consumer_name,
                 streams=streams_dict,
@@ -235,7 +235,7 @@ async def stream_consumer_worker(worker_id: int):
                 try:
                     await write_to_timescaledb(pool, batch_data)
                     # ACK successful inserts
-                    await redis_client.xack(stream_name, CONSUMER_GROUP, *msg_ids)
+                    await get_redis().xack(stream_name, CONSUMER_GROUP, *msg_ids)
                 except Exception as e:
                     log.error("worker.write_failed", error=str(e), stream=stream_name, count=len(msg_ids))
                     # Messages remain pending (un-ACKed) and can be claimed by other workers

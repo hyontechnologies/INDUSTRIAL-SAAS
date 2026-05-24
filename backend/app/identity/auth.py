@@ -167,10 +167,10 @@ async def get_current_user(
 
     session_id = payload.get("session_id")
     if session_id:
-        from app.telemetry.stream_writer import redis_client
+        from app.infra.redis import get_redis
 
-        if redis_client:
-            is_revoked = await redis_client.get(f"revoked:session:{session_id}")
+        if get_redis():
+            is_revoked = await get_redis().get(f"revoked:session:{session_id}")
             if is_revoked:
                 raise HTTPException(status_code=401, detail="Session has been revoked")
 
