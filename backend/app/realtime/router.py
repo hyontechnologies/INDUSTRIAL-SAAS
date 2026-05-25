@@ -54,7 +54,8 @@ async def websocket_stream(
     """
     # ── Auth ────────────────────────────────────────────────────────────────
     if api_key:
-        t = await _verify_edge_api_key_db(api_key)
+        pool = get_read_pool()
+        t = await _verify_edge_api_key_db(api_key, pool)
         if not t or t != tenant_id:
             await websocket.close(code=4401)
             return
