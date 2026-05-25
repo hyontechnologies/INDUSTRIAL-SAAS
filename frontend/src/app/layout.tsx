@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { Outlet, NavLink } from 'react-router-dom';
 import {
   Activity,
@@ -74,13 +75,26 @@ export function Layout() {
   const handleWsMessage = useAppStore((s) => s.handleWsMessage);
   const setConnectionStatus = useAppStore((s) => s.setConnectionStatus);
 
+  const [wsTicket, setWsTicket] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!user) return;
+    fetch('/api/v1/ticket/ws', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('industrial_auth_token')}` }
+    })
+    .then(r => r.json())
+    .then(d => setWsTicket(d.ticket))
+    .catch(err => console.error('Failed to get WS ticket', err));
+  }, [user]);
+
   useWebSocket({
     tenantId: user?.tenant_id || 'piccadily',
     plantId: selectedPlantId || 'BOILER_PLC_01',
-    apiKey: 'changeme',
+    ticket: wsTicket ?? undefined,
     onMessage: handleWsMessage,
     onStatusChange: setConnectionStatus,
-    enabled: !!user,
+    enabled: !!user && !!wsTicket,
   });
 
   return (

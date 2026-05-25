@@ -3,7 +3,6 @@ Piccadily Industrial Historian — Test Fixtures
 """
 
 import pytest
-import asyncio
 from unittest.mock import AsyncMock
 from fastapi.testclient import TestClient
 
@@ -11,11 +10,7 @@ from app.main import app
 from app.models import UserContext
 
 
-@pytest.fixture(scope="session")
-def event_loop():
-    loop = asyncio.get_event_loop_policy().new_event_loop()
-    yield loop
-    loop.close()
+# Removed event_loop fixture to use pytest-asyncio default session loop
 
 
 @pytest.fixture
@@ -36,6 +31,35 @@ def mock_user():
     )
 
 
+from app.infra.database import get_read_pool
+
+
 @pytest.fixture
-def client():
-    return TestClient(app)
+def mock_pool(mock_db_conn):
+    pool = AsyncMock()
+
+    # Mock async with pool.acquire() as conn:
+    import contextlib
+
+    @contextlib.asynccontextmanager
+    async def mock_acquire():
+        yield mock_db_conn
+
+    pool.acquire = mock_acquire
+    return pool
+
+
+@pytest.fixture
+def client(mock_pool):
+    import contextlib
+
+    @contextlib.asynccontextmanager
+    async def mock_lifespan(app):
+        yield
+
+    app.router.lifespan_context = mock_lifespan
+
+    app.dependency_overrides[get_read_pool] = lambda: mock_pool
+    with TestClient(app) as c:
+        yield c
+    app.dependency_overrides.clear()

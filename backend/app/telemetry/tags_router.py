@@ -18,7 +18,7 @@ router = APIRouter(prefix="/api/v1/tags", tags=["tags"])
 async def list_tags(
     plant_id: str = Query(...),
     user: UserContext = Depends(require_permission(Permission.METADATA_READ)),
-    _=Depends(require_plant_access),
+    _=Depends(require_plant_access()),
     conn: asyncpg.Connection = Depends(get_db),
 ):
     rows = await conn.fetch(
@@ -38,7 +38,7 @@ async def search_tags(
     q: str = Query(..., min_length=1, description="Tag name / description substring"),
     limit: int = Query(50, le=200),
     user: UserContext = Depends(require_permission(Permission.METADATA_READ)),
-    _=Depends(require_plant_access),
+    _=Depends(require_plant_access()),
     conn: asyncpg.Connection = Depends(get_db),
 ):
     """Full-text search across tag_name and description."""
@@ -60,7 +60,7 @@ async def upsert_tag_metadata(
     payload: TagMetadataUpdate,
     plant_id: str = Query(...),
     user: UserContext = Depends(require_permission(Permission.METADATA_WRITE)),
-    _=Depends(require_plant_access),
+    _=Depends(require_plant_access()),
     conn: asyncpg.Connection = Depends(get_db),
 ):
     await conn.execute(

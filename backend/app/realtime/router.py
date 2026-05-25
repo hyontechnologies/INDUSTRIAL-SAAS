@@ -18,7 +18,7 @@ from app.models import UserContext
 router = APIRouter(prefix="/api/v1", tags=["websocket"])
 
 
-@router.post("/ws/ticket")
+@router.post("/ticket/ws")
 async def generate_ws_ticket(user: UserContext = Depends(require_permission(Permission.TELEMETRY_READ))):
     """
     Generate a short-lived, single-use ticket for WebSocket authentication.
@@ -54,7 +54,8 @@ async def websocket_stream(
     """
     # ── Auth ────────────────────────────────────────────────────────────────
     if api_key:
-        t = await _verify_edge_api_key_db(api_key)
+        pool = get_read_pool()
+        t = await _verify_edge_api_key_db(api_key, pool)
         if not t or t != tenant_id:
             await websocket.close(code=4401)
             return

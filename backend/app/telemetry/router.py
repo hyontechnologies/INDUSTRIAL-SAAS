@@ -44,7 +44,7 @@ async def get_latest(
     plant_id: str = Query(...),
     tags: Optional[str] = Query(None, description="Comma-separated tag list"),
     user: UserContext = Depends(require_permission(Permission.TELEMETRY_READ)),
-    _=Depends(require_plant_access),
+    _=Depends(require_plant_access()),
     conn: asyncpg.Connection = Depends(get_db),
 ):
     """Latest value for all (or specified) tags in a plant. O(1) per tag."""
@@ -77,7 +77,7 @@ async def get_history(
     agg: str = Query("avg", description="avg | min | max | last"),
     limit: int = Query(2000, le=10000),
     user: UserContext = Depends(require_permission(Permission.TELEMETRY_READ)),
-    _=Depends(require_plant_access),
+    _=Depends(require_plant_access()),
     conn: asyncpg.Connection = Depends(get_db),
 ):
     """Tag history with time-bucket aggregation. Auto-selects raw or continuous aggregate."""
@@ -144,7 +144,7 @@ async def get_multi_history(
     agg: str = Query("avg"),
     limit: int = Query(1000, le=5000),
     user: UserContext = Depends(require_permission(Permission.TELEMETRY_READ)),
-    _=Depends(require_plant_access),
+    _=Depends(require_plant_access()),
     conn: asyncpg.Connection = Depends(get_db),
 ):
     """Multi-tag trend correlation. Returns pivot format for React charts."""
@@ -203,7 +203,7 @@ async def get_tag_stats(
     tag_name: str = Query(...),
     hours: int = Query(24, ge=1, le=720),
     user: UserContext = Depends(require_permission(Permission.TELEMETRY_READ)),
-    _=Depends(require_plant_access),
+    _=Depends(require_plant_access()),
     conn: asyncpg.Connection = Depends(get_db),
 ):
     """Min/max/avg/stddev/count for a tag over the last N hours."""
@@ -236,7 +236,7 @@ async def get_stale_tags(
     plant_id: str = Query(...),
     stale_minutes: int = Query(None, description="Override default stale threshold"),
     user: UserContext = Depends(require_permission(Permission.TELEMETRY_READ)),
-    _=Depends(require_plant_access),
+    _=Depends(require_plant_access()),
     conn: asyncpg.Connection = Depends(get_db),
 ):
     """Tags whose last update is older than stale_minutes."""
@@ -267,7 +267,7 @@ async def export_telemetry(
     fmt: str = Query("csv", description="csv | json"),
     limit: int = Query(50000, le=100000),
     user: UserContext = Depends(require_permission(Permission.TELEMETRY_READ)),
-    _=Depends(require_plant_access),
+    _=Depends(require_plant_access()),
     conn: asyncpg.Connection = Depends(get_db),
 ):
     """Raw data export. Returns CSV (default) or JSON."""

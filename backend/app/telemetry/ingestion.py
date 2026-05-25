@@ -69,7 +69,7 @@ async def ingest_telemetry_batch(
                         "q": pt.quality.value,
                         "t": pt.timestamp.isoformat() if pt.timestamp else None,
                     }
-                    for pt in batch.points[:50]  # cap payload size
+                    for pt in batch.points
                 },
                 "alarm_events": [],  # Emitted by alarm consumer now
             },

@@ -88,17 +88,19 @@ export const useAppStore = create<AppStore>()(
       switch (msg.type) {
         case 'snapshot': {
           const snap = msg as WsSnapshot;
-          const newValues: Record<string, TelemetryLatest> = {};
-          for (const [tagName, val] of Object.entries(snap.data)) {
-            newValues[tagName] = {
-              tag_name: tagName,
-              value: val.v,
-              quality: val.q,
-              ts: val.t,
-              unit: val.u,
-            };
-          }
-          set({ latestValues: newValues });
+          set((state) => {
+            const merged = { ...state.latestValues };
+            for (const [tagName, val] of Object.entries(snap.data)) {
+              merged[tagName] = {
+                tag_name: tagName,
+                value: val.v,
+                quality: val.q,
+                ts: val.t,
+                unit: val.u,
+              };
+            }
+            return { latestValues: merged };
+          });
           break;
         }
         case 'telemetry': {

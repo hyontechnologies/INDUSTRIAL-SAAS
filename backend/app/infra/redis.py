@@ -24,6 +24,8 @@ async def init_redis_pool():
         settings.REDIS_URL,
         decode_responses=True,
         max_connections=20,
+        health_check_interval=30,
+        retry_on_timeout=True,
     )
     await redis_client.ping()
     log.info("redis.pool_initialized", url=settings.REDIS_URL)

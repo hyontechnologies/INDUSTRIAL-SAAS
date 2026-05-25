@@ -1,6 +1,6 @@
 from fastapi.testclient import TestClient
 
-from app.identity.auth import Permission, require_plant_access, get_current_user
+from app.identity.auth import Permission, get_current_user
 from app.main import app
 from app.models import UserContext
 
@@ -28,6 +28,7 @@ def override_require_permission_viewer():
             role="viewer",
             is_edge=False,
             permissions=[Permission.METADATA_READ],
+            plant_ids=["BOILER_PLC_01"],
         )
 
     return _override
@@ -75,7 +76,6 @@ def test_admin_access_denied_for_viewer(client: TestClient, mock_db_conn):
 
 def test_plant_access_enforcement(client: TestClient, mock_db_conn):
     app.dependency_overrides[get_current_user] = override_require_permission_viewer()
-    app.dependency_overrides[require_plant_access] = override_require_plant_access_fail()
     from app.infra.database import get_db
 
     app.dependency_overrides[get_db] = lambda: mock_db_conn
@@ -88,7 +88,6 @@ def test_plant_access_enforcement(client: TestClient, mock_db_conn):
 
 def test_plant_access_allowed(client: TestClient, mock_db_conn):
     app.dependency_overrides[get_current_user] = override_require_permission_viewer()
-    app.dependency_overrides[require_plant_access] = override_require_plant_access_success()
     from app.infra.database import get_db
 
     app.dependency_overrides[get_db] = lambda: mock_db_conn

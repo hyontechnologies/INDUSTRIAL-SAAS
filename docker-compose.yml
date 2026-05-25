@@ -110,13 +110,15 @@ services:
     networks:
       - industrial_net
 
-  # ── Redis (session cache + optional pub/sub) ────────────────────
+  # ── Redis (realtime nervous system) ────────────────────────────────────────────────
   redis:
     image: redis:7-alpine
     container_name: piccadily-redis
     restart: unless-stopped
     ports:
       - "6379:6379"
+    volumes:
+      - redis_data:/data
     command: redis-server --maxmemory 128mb --maxmemory-policy allkeys-lru --appendonly yes
     deploy:
       resources:
@@ -127,6 +129,33 @@ services:
       interval: 10s
       timeout: 3s
       retries: 3
+    networks:
+      - industrial_net
+
+  # ── RedisInsight (developer GUI) ────────────────────────────────────────────────
+  redisinsight:
+    image: redis/redisinsight:latest
+    container_name: piccadily-redisinsight
+    restart: unless-stopped
+    ports:
+      - "5540:5540"
+    volumes:
+      - redisinsight_data:/data
+    networks:
+      - industrial_net
+
+  # ── Redis Exporter (Prometheus metrics) ────────────────────────────────────────────────
+  redis-exporter:
+    image: oliver006/redis_exporter:latest
+    container_name: piccadily-redis-exporter
+    restart: unless-stopped
+    environment:
+      - REDIS_ADDR=redis://redis:6379
+    ports:
+      - "9121:9121"
+    depends_on:
+      redis:
+        condition: service_healthy
     networks:
       - industrial_net
 
@@ -153,6 +182,10 @@ volumes:
   tsdb_data:
     driver: local
   grafana_data:
+    driver: local
+  redis_data:
+    driver: local
+  redisinsight_data:
     driver: local
 
 networks:
