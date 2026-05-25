@@ -177,7 +177,7 @@ async def alarm_summary(
     plant_id: str = Query(...),
     hours: int = Query(24, ge=1, le=720),
     user: UserContext = Depends(require_permission(Permission.ALARMS_READ)),
-    _=Depends(require_plant_access),
+    _=Depends(require_plant_access()),
     conn: asyncpg.Connection = Depends(get_db),
 ):
     """Alarm count by severity for the last N hours — dashboard KPI tiles."""

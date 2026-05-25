@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../../shared/stores/useAppStore';
 import { Zap, Lock, Mail, ArrowRight } from 'lucide-react';
+import { supabase } from '../../shared/api/supabase';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -15,24 +16,36 @@ export default function LoginPage() {
     setIsLoading(true);
 
     try {
-      // For this phase, we mock a successful login to unblock local development
-      // since the Supabase integration happens in Phase 3.
-      setTimeout(() => {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (error) throw error;
+
+      if (data.session) {
+        localStorage.setItem('industrial_auth_token', data.session.access_token);
+
+        // Extract tenant_id from user metadata if available, default to piccadily
+        const tenant_id = data.user.app_metadata?.tenant_id || data.user.user_metadata?.tenant_id || 'piccadily';
+        const role = data.user.app_metadata?.role || 'operator';
+        const plant_ids = data.user.app_metadata?.plant_ids || [];
+
         setUser({
-          user_id: 'local-dev-user',
-          tenant_id: 'piccadily',
-          email: email || 'operator@industrial.local',
-          role: 'admin',
-          plant_ids: [],
+          user_id: data.user.id,
+          tenant_id,
+          email: data.user.email || email,
+          role,
+          plant_ids,
           is_edge: false,
         });
 
-        // Mock a token in localStorage for the API client
-        localStorage.setItem('industrial_auth_token', 'mock_jwt_token');
         navigate('/');
-      }, 800);
+      }
     } catch (err) {
       console.error('Login failed', err);
+      // In a real app we'd show a toast or error message here
+    } finally {
       setIsLoading(false);
     }
   };

@@ -40,21 +40,26 @@ class ConnectionManager:
         log.info("ws.pubsub_started")
 
     async def _listen_to_redis(self, pubsub):
-        try:
-            async for message in pubsub.listen():
-                if message["type"] == "pmessage":
-                    channel = message["channel"]
-                    data = json.loads(message["data"])
+        while True:
+            try:
+                # Re-subscribe on reconnects if needed
+                await pubsub.psubscribe("ws|broadcast|*")
+                async for message in pubsub.listen():
+                    if message["type"] == "pmessage":
+                        channel = message["channel"]
+                        data = json.loads(message["data"])
 
-                    # Extract tenant/plant from channel name "ws|broadcast|tenant_id|plant_id"
-                    parts = channel.split("|")
-                    if len(parts) == 4:
-                        tenant_id, plant_id = parts[2], parts[3]
-                        await self._local_fanout(tenant_id, plant_id, data)
-        except asyncio.CancelledError:
-            pass
-        except Exception as e:
-            log.error("ws.pubsub_error", error=str(e))
+                        # Extract tenant/plant from channel name "ws|broadcast|tenant_id|plant_id"
+                        parts = channel.split("|")
+                        if len(parts) == 4:
+                            tenant_id, plant_id = parts[2], parts[3]
+                            await self._local_fanout(tenant_id, plant_id, data)
+            except asyncio.CancelledError:
+                log.info("ws.pubsub_task_cancelled")
+                break
+            except Exception as e:
+                log.error("ws.pubsub_error", error=str(e))
+                await asyncio.sleep(5)  # Exponential backoff could be better, but a constant 5s is a good start
 
     async def stop_pubsub(self):
         if self._pubsub_task:

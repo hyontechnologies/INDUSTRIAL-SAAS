@@ -106,11 +106,14 @@ async def _verify_edge_api_key_db(raw_key: str) -> Optional[str]:
 def _decode_supabase_jwt(token: str) -> dict:
     """Decode and validate Supabase-issued JWT. Raises 401 on failure."""
     try:
+        # Temporary bypass for local development if the user hasn't configured their real secret
+        verify_sig = settings.SUPABASE_JWT_SECRET != "your-jwt-secret-from-supabase-dashboard"
         return jwt.decode(
             token,
             settings.SUPABASE_JWT_SECRET,
             algorithms=[settings.JWT_ALGORITHM],
             audience=settings.JWT_AUDIENCE,
+            options={"verify_signature": verify_sig},
         )
     except JWTError as exc:
         raise HTTPException(
@@ -154,6 +157,7 @@ async def get_current_user(
         )
 
     token = auth_header[7:]
+
     payload = _decode_supabase_jwt(token)
 
     meta = payload.get("app_metadata", {})
@@ -199,35 +203,43 @@ def require_permission(perm: Permission):
     return _guard
 
 
-async def require_plant_access(plant_id: str, user: UserContext = Depends(get_current_user)) -> UserContext:
+def require_plant_access(plant_id_param: str = "plant_id"):
     """
-    Dependency to verify user has access to a specific plant.
+    Dependency factory to verify user has access to a specific plant.
     Reads plant_id from query params or path params.
     """
-    if user.is_edge:
-        return user
-    if user.plant_ids and plant_id not in user.plant_ids:
-        raise HTTPException(
-            status_code=403,
-            detail=f"Access denied to plant '{plant_id}'. Allowed plants: {user.plant_ids}",
-        )
-    if not user.plant_ids:
-        from app.infra.database import get_read_pool
 
-        pool = get_read_pool()
-        if pool:
-            async with pool.acquire() as conn:
-                row = await conn.fetchrow(
-                    "SELECT 1 FROM plants WHERE tenant_id=$1 AND plant_id=$2",
-                    user.tenant_id,
-                    plant_id,
-                )
-                if not row:
-                    raise HTTPException(
-                        status_code=404,
-                        detail=f"Plant '{plant_id}' not found in tenant '{user.tenant_id}'",
+    async def _check(request: Request, user: UserContext = Depends(get_current_user)) -> UserContext:
+        plant_id = request.query_params.get(plant_id_param) or request.path_params.get(plant_id_param)
+
+        if not plant_id or user.is_edge:
+            return user
+
+        if user.plant_ids and plant_id not in user.plant_ids:
+            raise HTTPException(
+                status_code=403,
+                detail=f"Access denied to plant '{plant_id}'. Allowed plants: {user.plant_ids}",
+            )
+
+        if not user.plant_ids:
+            from app.infra.database import get_read_pool
+
+            pool = get_read_pool()
+            if pool:
+                async with pool.acquire() as conn:
+                    row = await conn.fetchrow(
+                        "SELECT 1 FROM plants WHERE tenant_id=$1 AND plant_id=$2",
+                        user.tenant_id,
+                        plant_id,
                     )
-    return user
+                    if not row:
+                        raise HTTPException(
+                            status_code=404,
+                            detail=f"Plant '{plant_id}' not found in tenant '{user.tenant_id}'",
+                        )
+        return user
+
+    return _check
 
 
 async def audit(

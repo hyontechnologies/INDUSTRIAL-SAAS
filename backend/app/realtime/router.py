@@ -18,7 +18,7 @@ from app.models import UserContext
 router = APIRouter(prefix="/api/v1", tags=["websocket"])
 
 
-@router.post("/ws/ticket")
+@router.post("/ticket/ws")
 async def generate_ws_ticket(user: UserContext = Depends(require_permission(Permission.TELEMETRY_READ))):
     """
     Generate a short-lived, single-use ticket for WebSocket authentication.

@@ -50,7 +50,7 @@ async def list_plants(
 async def get_plant(
     plant_id: str,
     user: UserContext = Depends(require_permission(Permission.METADATA_READ)),
-    _=Depends(require_plant_access),
+    _=Depends(require_plant_access()),
     conn: asyncpg.Connection = Depends(get_db),
 ):
     row = await conn.fetchrow(
@@ -90,7 +90,7 @@ async def create_plant(
 async def deactivate_plant(
     plant_id: str,
     user: UserContext = Depends(require_permission(Permission.METADATA_WRITE)),
-    _=Depends(require_plant_access),
+    _=Depends(require_plant_access()),
     conn: asyncpg.Connection = Depends(get_db),
 ):
     """Soft-delete (sets is_active=false). Data is retained."""
@@ -109,7 +109,7 @@ async def deactivate_plant(
 async def plant_summary(
     plant_id: str,
     user: UserContext = Depends(require_permission(Permission.TELEMETRY_READ)),
-    _=Depends(require_plant_access),
+    _=Depends(require_plant_access()),
     conn: asyncpg.Connection = Depends(get_db),
 ):
     """Dashboard KPI summary — tag counts + alarm counts in one round-trip."""

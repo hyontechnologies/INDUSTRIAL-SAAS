@@ -5,9 +5,11 @@ All Redis key patterns in one place. No more magic strings scattered across modu
 """
 
 
-def stream_key(prefix: str, tenant_id: str, plant_id: str) -> str:
+def stream_key(tenant_id: str, plant_id: str) -> str:
     """Redis stream key for telemetry ingestion pipeline."""
-    return f"{prefix}:{tenant_id}:{plant_id}"
+    from app.config import settings
+
+    return f"{settings.REDIS_STREAM_PREFIX}{tenant_id}:{plant_id}"
 
 
 def threshold_cache_key(tenant_id: str, plant_id: str, tag_name: str) -> str:
