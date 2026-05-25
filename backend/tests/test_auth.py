@@ -26,4 +26,5 @@ async def test_get_current_user_valid_api_key():
         assert user.is_edge is True
         assert user.tenant_id == "piccadily"
         assert user.role == "edge_agent"
-        mock_verify.assert_called_once_with("valid_raw_key")
+        mock_verify.assert_called_once()
+        assert mock_verify.call_args[0][0] == "valid_raw_key"

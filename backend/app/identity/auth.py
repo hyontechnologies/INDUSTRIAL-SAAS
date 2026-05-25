@@ -13,6 +13,7 @@ import asyncpg
 import structlog
 from fastapi import Depends, Header, HTTPException, Request, status
 from jose import JWTError, jwt
+from app.infra.database import get_read_pool
 
 from app.config import settings
 from app.models import UserContext
@@ -72,7 +73,7 @@ def _hash_api_key(raw_key: str) -> str:
     return hashlib.sha256(raw_key.encode()).hexdigest()
 
 
-async def _verify_edge_api_key_db(raw_key: str) -> Optional[str]:
+async def _verify_edge_api_key_db(raw_key: str, pool: asyncpg.Pool) -> Optional[str]:
     """
     Check api_keys table first (DB-backed), then fall back to env-var map.
     Returns tenant_id if valid, else None.
@@ -80,9 +81,6 @@ async def _verify_edge_api_key_db(raw_key: str) -> Optional[str]:
     h = _hash_api_key(raw_key)
 
     # DB lookup (primary source)
-    from app.infra.database import get_read_pool
-
-    pool = get_read_pool()
     if pool:
         try:
             async with pool.acquire() as conn:
@@ -127,6 +125,7 @@ async def get_current_user(
     request: Request,
     authorization: Optional[str] = Header(default=None),
     x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
+    pool: asyncpg.Pool = Depends(get_read_pool),
 ) -> UserContext:
     """
     Dual-auth resolver:
@@ -138,7 +137,7 @@ async def get_current_user(
     auth_header = authorization if isinstance(authorization, str) else None
 
     if api_key:
-        tenant_id = await _verify_edge_api_key_db(api_key)
+        tenant_id = await _verify_edge_api_key_db(api_key, pool)
         if not tenant_id:
             raise HTTPException(status_code=401, detail="Invalid API key")
         return UserContext(
@@ -209,7 +208,9 @@ def require_plant_access(plant_id_param: str = "plant_id"):
     Reads plant_id from query params or path params.
     """
 
-    async def _check(request: Request, user: UserContext = Depends(get_current_user)) -> UserContext:
+    async def _check(
+        request: Request, user: UserContext = Depends(get_current_user), pool: asyncpg.Pool = Depends(get_read_pool)
+    ) -> UserContext:
         plant_id = request.query_params.get(plant_id_param) or request.path_params.get(plant_id_param)
 
         if not plant_id or user.is_edge:
@@ -222,9 +223,6 @@ def require_plant_access(plant_id_param: str = "plant_id"):
             )
 
         if not user.plant_ids:
-            from app.infra.database import get_read_pool
-
-            pool = get_read_pool()
             if pool:
                 async with pool.acquire() as conn:
                     row = await conn.fetchrow(
