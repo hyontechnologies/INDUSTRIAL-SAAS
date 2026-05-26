@@ -3,6 +3,8 @@ import { useParams } from 'react-router-dom';
 import { Bell, CheckCircle, ShieldAlert, AlertTriangle, Info, Clock, CheckCircle2, Filter, Search } from 'lucide-react';
 import { useActiveAlarms, useAlarmHistory, useAcknowledgeAlarm, useClearAlarms } from '../../api/hooks/useAlarms';
 import { useAuthStore } from '../../stores/useAuthStore';
+import { useAlarmStore } from '../../stores/useAlarmStore';
+import { Alarm } from '../../types/alarm';
 
 export default function AlarmsConsole() {
   const { plantId } = useParams<{ plantId: string }>();
@@ -12,7 +14,11 @@ export default function AlarmsConsole() {
   const [filterSeverity, setFilterSeverity] = useState<string>('ALL');
   const [filterTag, setFilterTag] = useState<string>('');
 
-  const { data: activeAlarmsData, isLoading: isLoadingActive } = useActiveAlarms(plantId);
+  const liveAlarms = useAlarmStore(s => s.activeAlarms);
+  const activeAlarmsData = useMemo(() => {
+    return { alarms: liveAlarms, count: liveAlarms.length };
+  }, [liveAlarms]);
+  const isLoadingActive = false;
   const { data: historyAlarmsData, isLoading: isLoadingHistory } = useAlarmHistory(plantId);
 
   const { user } = useAuthStore();
@@ -52,25 +58,25 @@ export default function AlarmsConsole() {
 
   // Apply filters
   const filteredActive = useMemo(() => {
-    let list = activeAlarmsData?.alarms || [];
+    let list: Alarm[] = activeAlarmsData?.alarms || [];
     if (filterSeverity !== 'ALL') {
-      list = list.filter(a => a.severity === filterSeverity);
+      list = list.filter((a: Alarm) => a.severity === filterSeverity);
     }
     if (filterTag.trim() !== '') {
       const lowerTag = filterTag.toLowerCase();
-      list = list.filter(a => a.tag_name.toLowerCase().includes(lowerTag) || a.message.toLowerCase().includes(lowerTag));
+      list = list.filter((a: Alarm) => a.tag_name.toLowerCase().includes(lowerTag) || a.message.toLowerCase().includes(lowerTag));
     }
     return list;
   }, [activeAlarmsData?.alarms, filterSeverity, filterTag]);
 
   const filteredHistory = useMemo(() => {
-    let list = historyAlarmsData?.alarms || [];
+    let list: Alarm[] = historyAlarmsData?.alarms || [];
     if (filterSeverity !== 'ALL') {
-      list = list.filter(a => a.severity === filterSeverity);
+      list = list.filter((a: Alarm) => a.severity === filterSeverity);
     }
     if (filterTag.trim() !== '') {
       const lowerTag = filterTag.toLowerCase();
-      list = list.filter(a => a.tag_name.toLowerCase().includes(lowerTag) || a.message.toLowerCase().includes(lowerTag));
+      list = list.filter((a: Alarm) => a.tag_name.toLowerCase().includes(lowerTag) || a.message.toLowerCase().includes(lowerTag));
     }
     return list;
   }, [historyAlarmsData?.alarms, filterSeverity, filterTag]);
@@ -199,7 +205,7 @@ export default function AlarmsConsole() {
                 </tr>
               )}
 
-              {currentFilteredData.map(alarm => (
+              {currentFilteredData.map((alarm: Alarm) => (
                 <tr key={alarm.alarm_id} className="hover:bg-blue-50/30 transition-colors group">
                   <td className="px-6 py-4">
                     <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border ${getSeverityStyle(alarm.severity)}`}>

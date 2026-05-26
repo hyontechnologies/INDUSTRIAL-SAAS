@@ -27,7 +27,7 @@ export default function OperationsHub() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <KpiCard
           title="Main Steam Temp"
-          tagName="TT_MS_TEMP"
+          tagName="TT-201"
           unit="°C"
           icon={Thermometer}
           trend="up"
@@ -35,14 +35,14 @@ export default function OperationsHub() {
         />
         <KpiCard
           title="Steam Pressure"
-          tagName="PT_MS"
+          tagName="PT-201"
           unit="bar"
           icon={Gauge}
           trend="stable"
         />
         <KpiCard
           title="Feedwater Flow"
-          tagName="FT_FW_FLOW"
+          tagName="FT-101"
           unit="t/h"
           icon={Droplets}
           trend="down"
@@ -50,7 +50,7 @@ export default function OperationsHub() {
         />
         <KpiCard
           title="FD Fan Vibration"
-          tagName="VIB_FDFA_DE"
+          tagName="FD_RPM"
           unit="mm/s"
           icon={Wind}
           trend="up"
@@ -65,7 +65,7 @@ export default function OperationsHub() {
           <div className="flex-1 min-h-[400px]">
             <EChartsTrend
               title="Boiler Performance Metrics"
-              tagNames={['TT_MS_TEMP', 'PT_MS', 'FT_FW_FLOW']}
+              tagNames={['TT-201', 'PT-201', 'FT-101']}
             />
           </div>
         </div>
@@ -76,14 +76,14 @@ export default function OperationsHub() {
           <div className="flex flex-col gap-4 flex-1">
             <GaugeCard
               title="Drum Level"
-              tagName="LT_DRUM_1"
+              tagName="LT-201"
               unit="%"
               min={-100}
               max={100}
             />
             <GaugeCard
               title="Furnace Pressure"
-              tagName="DT_FURN_DFT"
+              tagName="DT-401"
               unit="mmwc"
               min={-50}
               max={50}

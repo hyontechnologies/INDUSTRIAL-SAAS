@@ -2,7 +2,7 @@ import { Outlet } from 'react-router-dom';
 import Sidebar from '../components/Sidebar';
 import GlobalHeader from '../components/GlobalHeader';
 import { useWorkspaceStore } from '../stores/useWorkspaceStore';
-import { WebSocketProvider } from '../websocket/WebSocketProvider';
+import { useDataPoller } from '../hooks/useDataPoller';
 import { RealtimeStatusStrip } from '../components/shell/RealtimeStatusStrip';
 import { CommandPalette } from '../components/shell/CommandPalette';
 import { NotificationCenter } from '../components/shell/NotificationCenter';
@@ -10,9 +10,10 @@ import { NotificationCenter } from '../components/shell/NotificationCenter';
 export default function PlatformLayout() {
   const { sidebarCollapsed, sidebarOpen, setSidebarOpen } = useWorkspaceStore();
 
+  useDataPoller();
+
   return (
-    <WebSocketProvider>
-      <div className="min-h-screen bg-slate-50 font-sans text-slate-900 flex flex-col relative">
+    <div className="flex h-screen bg-slate-50 text-slate-900 font-sans overflow-hidden selection:bg-blue-100 selection:text-blue-900 relative">
         {/* Animated Background Mesh */}
         <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
           <div className="absolute top-0 -left-4 w-96 h-96 bg-purple-300 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob"></div>
@@ -35,7 +36,7 @@ export default function PlatformLayout() {
 
         {/* Main area — shifts right based on sidebar width */}
         <div
-          className={`flex-1 flex flex-col transition-all duration-300 min-h-screen relative z-10 ${
+          className={`flex-1 flex flex-col transition-all duration-300 h-screen overflow-y-auto relative z-10 ${
             sidebarCollapsed ? 'lg:ml-[72px]' : 'lg:ml-[260px]'
           }`}
         >
@@ -61,7 +62,5 @@ export default function PlatformLayout() {
         {/* Global Overlays */}
         <CommandPalette />
         <NotificationCenter />
-      </div>
-    </WebSocketProvider>
-  );
+      </div>);
 }

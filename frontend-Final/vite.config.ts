@@ -8,10 +8,7 @@ export default defineConfig({
     port: 3002,
     strictPort: true,
     proxy: {
-      '/api/v1/ws': {
-        target: 'ws://localhost:8000',
-        ws: true,
-      },
+
       '/api': {
         target: 'http://localhost:8000',
         changeOrigin: true,

@@ -1,16 +1,34 @@
 import React, { useState, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { FileText, Download, Calendar, Tag as TagIcon, BarChart2, FileJson, Clock } from 'lucide-react';
-import { useTags } from '../../api/hooks/useTags';
+import { useTelemetryStore } from '../../stores/useTelemetryStore';
 import { useTagStats } from '../../api/hooks/useTelemetry';
 import { useAuthStore } from '../../stores/useAuthStore';
 
+function TagStatRow({ tag, plantId, hours }: { tag: string; plantId: string; hours: number }) {
+  const { data, isLoading } = useTagStats(plantId, tag, hours);
+  if (isLoading) return <tr><td className="p-3 border-b">{tag}</td><td colSpan={4} className="p-3 border-b text-slate-400">Loading...</td></tr>;
+  if (!data?.stats) return <tr><td className="p-3 border-b">{tag}</td><td colSpan={4} className="p-3 border-b text-slate-400">No data</td></tr>;
+  return (
+    <tr className="hover:bg-slate-50 transition-colors">
+      <td className="p-3 border-b font-mono text-sm font-semibold text-slate-700">{tag}</td>
+      <td className="p-3 border-b tabular-nums">{data.stats.avg_val}</td>
+      <td className="p-3 border-b tabular-nums">{data.stats.min_val}</td>
+      <td className="p-3 border-b tabular-nums">{data.stats.max_val}</td>
+      <td className="p-3 border-b tabular-nums">{data.stats.std_val}</td>
+    </tr>
+  );
+}
+
 export default function Reports() {
-  const { plantId } = useParams<{ plantId: string }>();
+  const params = useParams<{ plantId: string }>();
+  // Handle fallback if route was /plants/live/trends
+  const plantId = params.plantId === 'live' ? 'BOILER_PLC_01' : params.plantId || 'BOILER_PLC_01';
   const { token } = useAuthStore();
 
   // Tag selection
-  const { data: tagsData } = useTags(plantId);
+  const latestValues = useTelemetryStore((s) => s.latestValues);
+  const availableTags = useMemo(() => Object.keys(latestValues).sort(), [latestValues]);
   const [selectedTag, setSelectedTag] = useState<string>('');
   const [reportHours, setReportHours] = useState<number>(24);
 
@@ -37,52 +55,104 @@ export default function Reports() {
     return new Date(customStart);
   }, [exportRangeType, exportPresetHours, exportEnd, customStart]);
 
+  const IMPORTANT_METRICS = [
+    'TT_MS_TEMP', 'PT_MS', 'FT_FW_FLOW', 'VIB_FDFA_DE',
+    'LT_DRUM_1', 'DT_FURN_DFT', 'BOILER_EFF', 'BOILER_LOAD'
+  ];
+
+  const tagGroups = useMemo(() => {
+    const groups: Record<string, string[]> = {
+      'Important Metrics': [],
+      'Pressure (PT)': [],
+      'Flow (FT)': [],
+      'Temperature (TT)': [],
+      'Level (LT)': [],
+      'Draught (DT)': [],
+      'Vibration (VIB)': [],
+      'Others': []
+    };
+
+    availableTags.forEach(tag => {
+      if (IMPORTANT_METRICS.includes(tag)) {
+        groups['Important Metrics'].push(tag);
+      } else if (tag.startsWith('PT_')) {
+        groups['Pressure (PT)'].push(tag);
+      } else if (tag.startsWith('FT_')) {
+        groups['Flow (FT)'].push(tag);
+      } else if (tag.startsWith('TT_')) {
+        groups['Temperature (TT)'].push(tag);
+      } else if (tag.startsWith('LT_')) {
+        groups['Level (LT)'].push(tag);
+      } else if (tag.startsWith('DT_')) {
+        groups['Draught (DT)'].push(tag);
+      } else if (tag.startsWith('VIB_')) {
+        groups['Vibration (VIB)'].push(tag);
+      } else {
+        groups['Others'].push(tag);
+      }
+    });
+    return groups;
+  }, [availableTags]);
+
   // Auto-select first tag if none selected
   React.useEffect(() => {
-    if (tagsData?.tags?.length && !selectedTag) {
-      setSelectedTag(tagsData.tags[0].tag_name);
+    if (availableTags.length > 0 && !selectedTag) {
+      const timer = setTimeout(() => {
+        setSelectedTag(availableTags[0]);
+      }, 0);
+      return () => clearTimeout(timer);
     }
-  }, [tagsData?.tags, selectedTag]);
+  }, [availableTags, selectedTag]);
 
-  // Fetch stats for selected tag
-  const { data: statsData, isLoading: isLoadingStats } = useTagStats(plantId, selectedTag, reportHours);
+  const isGroupSelected = selectedTag.startsWith('__GROUP__:');
+  // Fetch stats for selected tag (disabled if group is selected)
+  const { data: statsData, isLoading: isLoadingStats } = useTagStats(plantId, isGroupSelected ? '' : selectedTag, reportHours);
 
   const [isExporting, setIsExporting] = useState(false);
 
-  const handleExport = () => {
+  const handleExport = async () => {
     if (!plantId || !selectedTag || !token) return;
 
     setIsExporting(true);
 
-    const url = `/api/v1/telemetry/export?plant_id=${plantId}&tag_name=${encodeURIComponent(selectedTag)}&start=${encodeURIComponent(exportStart.toISOString())}&end=${encodeURIComponent(exportEnd.toISOString())}&fmt=${exportFormat}`;
+    let tagsToExport = [selectedTag];
+    if (selectedTag.startsWith('__GROUP__:')) {
+      const groupName = selectedTag.split('__GROUP__:')[1];
+      tagsToExport = tagGroups[groupName] || [];
+    }
 
-    fetch(url, {
-      headers: {
-        'X-API-Key': token,
+    try {
+      for (const tag of tagsToExport) {
+        const url = `/api/v1/telemetry/export?plant_id=${plantId}&tag_name=${encodeURIComponent(tag)}&start=${encodeURIComponent(exportStart.toISOString())}&end=${encodeURIComponent(exportEnd.toISOString())}&fmt=${exportFormat}`;
+
+        const response = await fetch(url, {
+          headers: { 'X-API-Key': token }
+        });
+
+        if (!response.ok) throw new Error(`Export failed for ${tag}`);
+
+        const blob = await response.blob();
+        const downloadUrl = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = downloadUrl;
+        const extension = exportFormat === 'csv' ? 'csv' : 'json';
+        a.download = `${tag}_report.${extension}`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(downloadUrl);
+
+        // Small delay between downloads to prevent browser blocking
+        if (tagsToExport.length > 1) {
+          await new Promise(r => setTimeout(r, 300));
+        }
       }
-    })
-    .then(response => {
-      if (!response.ok) throw new Error("Export failed");
-      return response.blob();
-    })
-    .then(blob => {
-      const downloadUrl = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = downloadUrl;
-      const extension = exportFormat === 'csv' ? 'csv' : 'json';
-      a.download = `${selectedTag}_report.${extension}`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      window.URL.revokeObjectURL(downloadUrl);
-    })
-    .catch(err => {
+    } catch (err) {
       console.error("Export failed:", err);
-      alert("Failed to export data. Please try again.");
-    })
-    .finally(() => {
+      alert("Failed to export some data. Please try again.");
+    } finally {
       setIsExporting(false);
-    });
+    }
   };
 
   return (
@@ -113,9 +183,18 @@ export default function Reports() {
               onChange={(e) => setSelectedTag(e.target.value)}
               className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 font-medium transition-all"
             >
-              <option value="" disabled>Select a tag...</option>
-              {tagsData?.tags?.map(t => (
-                <option key={t.tag_name} value={t.tag_name}>{t.tag_name}</option>
+              <option value="" disabled>Select a tag or group...</option>
+              {Object.entries(tagGroups).map(([groupName, tags]) => (
+                tags.length > 0 && (
+                  <optgroup key={groupName} label={groupName}>
+                    <option value={`__GROUP__:${groupName}`} className="font-bold text-blue-600 bg-blue-50">
+                      Export Entire Group: {groupName}
+                    </option>
+                    {tags.map(tagName => (
+                      <option key={tagName} value={tagName}>{tagName}</option>
+                    ))}
+                  </optgroup>
+                )
               ))}
             </select>
           </div>
@@ -257,7 +336,32 @@ export default function Reports() {
             </div>
 
             <div className="flex-1 flex items-center justify-center min-h-[300px]">
-              {isLoadingStats ? (
+              {selectedTag.startsWith('__GROUP__:') ? (
+                <div className="w-full flex flex-col h-full max-h-[500px]">
+                  <h4 className="font-bold text-slate-800 mb-3 text-lg flex items-center gap-2">
+                    <FileText className="w-5 h-5 text-indigo-500" />
+                    Group Summary: {selectedTag.split('__GROUP__:')[1]}
+                  </h4>
+                  <div className="overflow-auto border border-slate-200 rounded-xl bg-white shadow-sm flex-1">
+                    <table className="w-full text-left text-sm">
+                      <thead className="bg-slate-50 sticky top-0 border-b border-slate-200 shadow-sm z-10">
+                        <tr>
+                          <th className="p-3 font-semibold text-slate-600">Tag Name</th>
+                          <th className="p-3 font-semibold text-slate-600">Average</th>
+                          <th className="p-3 font-semibold text-slate-600">Min</th>
+                          <th className="p-3 font-semibold text-slate-600">Max</th>
+                          <th className="p-3 font-semibold text-slate-600">Std Dev</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(tagGroups[selectedTag.split('__GROUP__:')[1]] || []).map(tag => (
+                          <TagStatRow key={tag} tag={tag} plantId={plantId || ''} hours={reportHours} />
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ) : isLoadingStats ? (
                 <div className="flex flex-col items-center">
                   <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600 mb-4"></div>
                   <p className="text-sm text-slate-500 font-medium">Calculating statistics...</p>

@@ -56,7 +56,7 @@ class Settings(BaseSettings):
     EDGE_API_KEYS: str = ""
 
     # ── CORS ─────────────────────────────────────────────────────────────────
-    CORS_ORIGINS: str = "http://localhost:3000,http://localhost:5173"
+    CORS_ORIGINS: str = "http://localhost:3000,http://localhost:5173,http://localhost:3002"
 
     # ── Telemetry ────────────────────────────────────────────────────────────
     TELEMETRY_BATCH_MAX: int = 500

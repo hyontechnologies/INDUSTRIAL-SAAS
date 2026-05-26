@@ -17,7 +17,7 @@ export async function fetchApi<T>(endpoint: string, options: RequestInit = {}): 
 
   if (token) {
     // Backend supports either X-API-Key or Authorization header
-    headers.set('Authorization', `Bearer ${token}`);
+    headers.set('X-API-Key', token);
   }
 
   const response = await fetch(`${BASE_URL}${endpoint}`, {

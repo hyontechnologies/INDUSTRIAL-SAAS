@@ -21,7 +21,7 @@ export interface Plant {
 
 export interface PlantsResponse {
   count: number;
-  plants: Plant[];
+  data: Plant[];
 }
 
 export function usePlants() {

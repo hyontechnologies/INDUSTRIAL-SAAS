@@ -22,7 +22,7 @@ services:
       - VITE_API_URL=http://piccadily-backend:8000/api/v1
       - EDGE_API_KEY_RAW=${EDGE_API_KEY_RAW:-changeme}
       - TENANT_ID=piccadily
-      - PLANT_ID=PICCADILY_PLANT_01
+      - PLANT_ID=BOILER_PLC_01
       - DEVICE_ID=BOILER_PLC_01
       - FLUSH_INTERVAL=2.0
       - LOG_LEVEL=INFO

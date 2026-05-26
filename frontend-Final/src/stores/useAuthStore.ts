@@ -15,7 +15,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
     role: 'operator',
   },
   isAuthenticated: true, // Dev default
-  token: 'changeme', // Dev API key
+  token: null, // Let backend fallback to dummy admin user
 
   login: (token, user) => set({ token, user, isAuthenticated: true }),
   logout: () => set({ token: null, user: null, isAuthenticated: false }),

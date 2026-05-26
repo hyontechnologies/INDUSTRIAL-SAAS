@@ -41,7 +41,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
   workspace: {
     organization: MOCK_ORGANIZATIONS[0],
     plantGroup: MOCK_PLANT_GROUPS[0],
-    plant: MOCK_PLANTS[1],
+    plant: MOCK_PLANTS[0],
   },
   setOrganization: (org) =>
     set((state) => ({

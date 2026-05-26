@@ -76,7 +76,7 @@ async def main():
 
     # Create object hierarchy
     objects = server.nodes.objects
-    plant_node = await objects.add_folder(ns_idx, "PICCADILY_PLANT_01")
+    plant_node = await objects.add_folder(ns_idx, "BOILER_PLC_01")
     device_node = await plant_node.add_folder(ns_idx, "BOILER_PLC_01")
 
     nodes = []
