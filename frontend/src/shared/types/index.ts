@@ -122,11 +122,19 @@ export interface WsAlarmsClear {
   cleared_by: string;
 }
 
+export interface WsLatestUpdate {
+  type: 'LATEST_UPDATE';
+  plant_id: string;
+  count: number;
+  data: TelemetryLatest[];
+}
+
 export type WsMessage =
   | WsTelemetryUpdate
   | WsSnapshot
   | WsAlarmEvent
   | WsAlarmAck
+  | WsLatestUpdate
   | WsAlarmsClear;
 
 // ── API Response Envelopes ──────────────────────────────────────────────

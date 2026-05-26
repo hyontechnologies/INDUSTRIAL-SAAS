@@ -180,7 +180,7 @@ async def stream_consumer_worker(worker_id: int):
                     if not stream_messages:
                         continue
                     has_pending = True
-                    batch_data = [msg_data for _, msg_data in stream_messages]
+                    batch_data = [msg_data for _, msg_data in stream_messages if msg_data and "tenant_id" in msg_data]
                     msg_ids = [msg_id for msg_id, _ in stream_messages]
                     try:
                         await write_to_timescaledb(pool, batch_data)
@@ -229,7 +229,7 @@ async def stream_consumer_worker(worker_id: int):
                     continue
 
                 # stream_messages is a list of tuples: (message_id, data_dict)
-                batch_data = [msg_data for _, msg_data in stream_messages]
+                batch_data = [msg_data for _, msg_data in stream_messages if msg_data and "tenant_id" in msg_data]
                 msg_ids = [msg_id for msg_id, _ in stream_messages]
 
                 try:

@@ -86,4 +86,6 @@ logs/
 
 # ── Grafana local data ──────────────────────────────────────────────────
 grafana/data/
-e d g e - a g e n t / * . d b *
+edge-agent/*.db*
+edge-agent/*.db-wal
+edge-agent/*.db-shm

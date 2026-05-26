@@ -2,16 +2,16 @@
 import React, { Suspense } from 'react';
 import { createBrowserRouter, Navigate, useRouteError } from 'react-router-dom';
 import { Layout } from './layout';
-import { AuthGuard } from '../features/auth/AuthGuard';
 
-// Lazy loaded feature pages
-const LoginPage = React.lazy(() => import('../features/auth/LoginPage'));
 const DashboardPage = React.lazy(() => import('../features/dashboard/DashboardPage'));
 const AlarmsPage = React.lazy(() => import('../features/alarms/AlarmsPage'));
 const TelemetryPage = React.lazy(() => import('../features/telemetry/TelemetryPage'));
 const HistorianPage = React.lazy(() => import('../features/historian/HistorianPage'));
 const PlantsPage = React.lazy(() => import('../features/plants/PlantsPage'));
 const AdminPage = React.lazy(() => import('../features/admin/AdminPage'));
+
+const TrendCenterPage = React.lazy(() => import('../features/trends/TrendCenterPage'));
+const ReportsPage = React.lazy(() => import('../features/reports/ReportsPage'));
 
 // Generic loading fallback
 function PageLoader() {
@@ -61,17 +61,8 @@ const withSuspense = (Component: React.LazyExoticComponent<any>) => (
 // eslint-disable-next-line react-refresh/only-export-components
 export const router = createBrowserRouter([
   {
-    path: '/login',
-    element: withSuspense(LoginPage),
-    errorElement: <ErrorBoundary />,
-  },
-  {
     path: '/',
-    element: (
-      <AuthGuard>
-        <Layout />
-      </AuthGuard>
-    ),
+    element: <Layout />,
     errorElement: <ErrorBoundary />,
     children: [
       {
@@ -93,6 +84,14 @@ export const router = createBrowserRouter([
       {
         path: 'tags',
         element: withSuspense(TelemetryPage),
+      },
+      {
+        path: 'trends/*',
+        element: withSuspense(TrendCenterPage),
+      },
+      {
+        path: 'reports/*',
+        element: withSuspense(ReportsPage),
       },
       {
         path: 'plants',
