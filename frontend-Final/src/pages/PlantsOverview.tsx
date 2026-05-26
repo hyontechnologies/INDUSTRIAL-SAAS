@@ -35,7 +35,7 @@ const PlantCard = ({ plant }: { plant: Plant }) => {
       orgId: '',
       plantGroupId: ''
     });
-    navigate('/dashboard');
+    navigate(`/plants/${plant.plant_id}/live`);
   };
 
   return (
@@ -114,7 +114,7 @@ export default function PlantsOverview() {
   const { data: plantsData, isLoading, isError } = usePlants();
   const [searchTerm, setSearchTerm] = useState('');
 
-  const plants = plantsData?.plants || [];
+  const plants = plantsData?.data || [];
 
   // Filter logic
   const filteredPlants = plants.filter(p =>

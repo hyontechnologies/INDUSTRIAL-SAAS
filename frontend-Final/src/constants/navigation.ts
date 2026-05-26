@@ -7,9 +7,7 @@ export const ALL_NAV_ITEMS: NavItem[] = [
   // OVERVIEW
   { id: 'dashboard', label: 'Dashboard', icon: 'LayoutDashboard', path: '/dashboard', category: 'OVERVIEW' },
 
-  // OPERATIONS
-  { id: 'plants', label: 'Plants Overview', icon: 'Factory', path: '/plants', category: 'OPERATIONS' },
-  { id: 'live-plant', label: 'Live Plant', icon: 'Zap', path: '/plants/live', category: 'OPERATIONS' },
+  { id: 'live-plant', label: 'Live Plant', icon: 'Zap', path: '/plants/BOILER_PLC_01/live', category: 'OPERATIONS' },
 
   // ENGINEERING
   { id: 'telemetry', label: 'Telemetry Explorer', icon: 'Radio', path: '/telemetry', category: 'ENGINEERING' },

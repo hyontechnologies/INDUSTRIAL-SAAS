@@ -2,17 +2,19 @@ import React, { useState, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { TrendingUp, Clock, Tag as TagIcon, X, Calendar } from 'lucide-react';
-import { useTags } from '../../api/hooks/useTags';
+import { useTelemetryStore } from '../../stores/useTelemetryStore';
 import { useTelemetryMultiHistory } from '../../api/hooks/useTelemetry';
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
 
 export default function Trends() {
-  const { plantId } = useParams<{ plantId: string }>();
+  const params = useParams<{ plantId: string }>();
+  // Handle fallback if route was /plants/live/trends
+  const plantId = params.plantId === 'live' ? 'BOILER_PLC_01' : params.plantId || 'BOILER_PLC_01';
 
   // Time range selection
   const [rangeType, setRangeType] = useState<'preset' | 'custom'>('preset');
-  const [presetHours, setPresetHours] = useState<number>(1);
+  const [presetHours, setPresetHours] = useState<number>(24);
   const [customStart, setCustomStart] = useState<string>(() => {
     const d = new Date(); d.setHours(d.getHours() - 24);
     // Format for datetime-local: YYYY-MM-DDThh:mm
@@ -36,17 +38,22 @@ export default function Trends() {
   const durationHours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
   const interval = durationHours <= 1 ? '1m' : durationHours <= 24 ? '5m' : durationHours <= 168 ? '15m' : '1h';
 
-  // Tag selection
-  const { data: tagsData } = useTags(plantId);
+  // Tag selection from live telemetry store
+  const latestValues = useTelemetryStore((s) => s.latestValues);
+  const availableTags = useMemo(() => Object.keys(latestValues).sort(), [latestValues]);
+
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [tagSearch, setTagSearch] = useState('');
 
   // Auto-select first tag if none selected and tags loaded
   React.useEffect(() => {
-    if (tagsData?.tags?.length && selectedTags.length === 0) {
-      setSelectedTags([tagsData.tags[0].tag_name]);
+    if (availableTags.length > 0 && selectedTags.length === 0) {
+      const timer = setTimeout(() => {
+        setSelectedTags([availableTags[0]]);
+      }, 0);
+      return () => clearTimeout(timer);
     }
-  }, [tagsData?.tags, selectedTags.length]);
+  }, [availableTags, selectedTags.length]);
 
   // Fetch chart data
   const { data: chartData, isLoading } = useTelemetryMultiHistory(
@@ -69,7 +76,46 @@ export default function Trends() {
     }
   };
 
-  const filteredTags = tagsData?.tags?.filter(t => t.tag_name.toLowerCase().includes(tagSearch.toLowerCase())) || [];
+  const filteredTags = availableTags.filter(t => t.toLowerCase().includes(tagSearch.toLowerCase()));
+
+  const IMPORTANT_METRICS = [
+    'TT_MS_TEMP', 'PT_MS', 'FT_FW_FLOW', 'VIB_FDFA_DE',
+    'LT_DRUM_1', 'DT_FURN_DFT', 'BOILER_EFF', 'BOILER_LOAD'
+  ];
+
+  const tagGroups = useMemo(() => {
+    const groups: Record<string, string[]> = {
+      'Important Metrics': [],
+      'Pressure (PT)': [],
+      'Flow (FT)': [],
+      'Temperature (TT)': [],
+      'Level (LT)': [],
+      'Draught (DT)': [],
+      'Vibration (VIB)': [],
+      'Others': []
+    };
+
+    filteredTags.forEach(tag => {
+      if (IMPORTANT_METRICS.includes(tag)) {
+        groups['Important Metrics'].push(tag);
+      } else if (tag.startsWith('PT_')) {
+        groups['Pressure (PT)'].push(tag);
+      } else if (tag.startsWith('FT_')) {
+        groups['Flow (FT)'].push(tag);
+      } else if (tag.startsWith('TT_')) {
+        groups['Temperature (TT)'].push(tag);
+      } else if (tag.startsWith('LT_')) {
+        groups['Level (LT)'].push(tag);
+      } else if (tag.startsWith('DT_')) {
+        groups['Draught (DT)'].push(tag);
+      } else if (tag.startsWith('VIB_')) {
+        groups['Vibration (VIB)'].push(tag);
+      } else {
+        groups['Others'].push(tag);
+      }
+    });
+    return groups;
+  }, [filteredTags]);
 
   return (
     <div className="flex flex-col gap-6 h-[calc(100vh-12rem)]">
@@ -141,13 +187,10 @@ export default function Trends() {
           <button
             onClick={async () => {
               if (selectedTags.length === 0) return alert("Select at least one tag to export");
-              const token = localStorage.getItem('auth-storage') ? JSON.parse(localStorage.getItem('auth-storage')!).state.token : 'changeme';
 
               for (const tag of selectedTags) {
                 try {
-                  const res = await fetch(`/api/v1/telemetry/export?plant_id=${plantId}&tag_name=${encodeURIComponent(tag)}&start=${start.toISOString()}&end=${end.toISOString()}&fmt=csv`, {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                  });
+                  const res = await fetch(`/api/v1/telemetry/export?plant_id=${plantId}&tag_name=${encodeURIComponent(tag)}&start=${start.toISOString()}&end=${end.toISOString()}&fmt=csv`);
                   if (!res.ok) throw new Error("Export failed");
 
                   const blob = await res.blob();
@@ -193,27 +236,46 @@ export default function Trends() {
             />
           </div>
           <div className="flex-1 overflow-y-auto p-2 scrollbar-thin">
-            {filteredTags.map(tag => {
-              const isSelected = selectedTags.includes(tag.tag_name);
-              return (
-                <button
-                  key={tag.tag_name}
-                  onClick={() => toggleTag(tag.tag_name)}
-                  className={`w-full text-left px-3 py-2.5 rounded-xl text-sm transition-all mb-1 flex items-center justify-between group
-                    ${isSelected ? 'bg-blue-50 border border-blue-200/50 text-blue-800 shadow-sm' : 'hover:bg-slate-50 text-slate-600 border border-transparent'}
-                  `}
-                >
-                  <span className={`truncate pr-2 ${isSelected ? 'font-semibold' : 'font-medium'}`}>{tag.tag_name}</span>
-                  {isSelected ? (
-                    <div className="bg-blue-100 p-1 rounded-md">
-                      <X className="w-3 h-3 text-blue-600" />
-                    </div>
-                  ) : (
-                    <div className="w-4 h-4 rounded-md border-2 border-slate-300 group-hover:border-blue-400 transition-colors" />
-                  )}
-                </button>
-              );
-            })}
+            {Object.entries(tagGroups).map(([groupName, tags]) => (
+              tags.length > 0 && (
+                <div key={groupName} className="mb-4">
+                  <div className="flex justify-between items-center mb-2 px-1">
+                    <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">{groupName}</h4>
+                    <button
+                      onClick={() => {
+                        const newSelection = tags.slice(0, 5);
+                        setSelectedTags(newSelection);
+                      }}
+                      className="text-[10px] bg-slate-100 hover:bg-blue-100 text-slate-600 hover:text-blue-700 font-semibold px-2 py-0.5 rounded transition-colors"
+                      title="Select up to 5 tags from this group"
+                    >
+                      Select Group
+                    </button>
+                  </div>
+                  {tags.map(tagName => {
+                    const isSelected = selectedTags.includes(tagName);
+                    return (
+                      <button
+                        key={tagName}
+                        onClick={() => toggleTag(tagName)}
+                        className={`w-full text-left px-3 py-2.5 rounded-xl text-sm transition-all mb-1 flex items-center justify-between group
+                          ${isSelected ? 'bg-blue-50 border border-blue-200/50 text-blue-800 shadow-sm' : 'hover:bg-slate-50 text-slate-600 border border-transparent'}
+                        `}
+                      >
+                        <span className={`truncate pr-2 ${isSelected ? 'font-semibold' : 'font-medium'}`}>{tagName}</span>
+                        {isSelected ? (
+                          <div className="bg-blue-100 p-1 rounded-md">
+                            <X className="w-3 h-3 text-blue-600" />
+                          </div>
+                        ) : (
+                          <div className="w-4 h-4 rounded-md border-2 border-slate-300 group-hover:border-blue-400 transition-colors" />
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              )
+            ))}
             {filteredTags.length === 0 && (
               <div className="text-center py-8 text-slate-400 text-sm">
                 No tags found matching search.
@@ -250,9 +312,9 @@ export default function Trends() {
                 </div>
               </div>
 
-              <div className="flex-1 w-full min-h-0">
+              <div className="flex-1 w-full min-h-[300px]">
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={chartData?.data || []} margin={{ top: 10, right: 30, left: 10, bottom: 10 }}>
+                  <LineChart data={chartData?.data ? [...chartData.data].reverse() : []} margin={{ top: 10, right: 30, left: 10, bottom: 10 }}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                     <XAxis
                       dataKey="ts"
@@ -293,13 +355,14 @@ export default function Trends() {
                     {selectedTags.map((tag, idx) => (
                       <Line
                         key={tag}
-                        type="monotone"
+                        type="stepAfter"
                         dataKey={tag}
                         stroke={COLORS[idx % COLORS.length]}
                         strokeWidth={2.5}
-                        dot={false}
+                        dot={{ r: 3, strokeWidth: 0, fill: COLORS[idx % COLORS.length] }}
                         activeDot={{ r: 6, strokeWidth: 0, fill: COLORS[idx % COLORS.length] }}
                         connectNulls
+                        isAnimationActive={false}
                       />
                     ))}
                   </LineChart>

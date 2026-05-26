@@ -25,6 +25,7 @@ import AlarmsConsole from './pages/plant/AlarmsConsole';
 import Trends from './pages/plant/Trends';
 import Reports from './pages/plant/Reports';
 import Maintenance from './pages/plant/Maintenance';
+import TagBrowser from './pages/TagBrowser';
 import {
   SkeletonPage,
   SettingsPage,
@@ -79,7 +80,7 @@ function App() {
 
         {/* Engineering Tools */}
         <Route path="/telemetry" element={<SkeletonPage title="Telemetry Explorer" />} />
-        <Route path="/tags" element={<SkeletonPage title="Tag Management" />} />
+        <Route path="/tags" element={<TagBrowser />} />
         <Route path="/devices" element={<SkeletonPage title="Devices & I/O" />} />
         <Route path="/agents" element={<SkeletonPage title="Edge Agents" />} />
 

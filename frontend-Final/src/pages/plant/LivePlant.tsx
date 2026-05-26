@@ -1,16 +1,32 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { Activity, AlertTriangle, Cpu, TrendingUp, AlertCircle, Box } from 'lucide-react';
-import { useTelemetryLatest } from '../../api/hooks/useTelemetry';
+import { useTelemetryStore } from '../../stores/useTelemetryStore';
 import { useActiveAlarms } from '../../api/hooks/useAlarms';
 import Boiler3D from '../../components/plant/Boiler3D';
+import TagBrowser from '../TagBrowser';
 
 export default function LivePlant() {
   const { plantId } = useParams<{ plantId: string }>();
-  const { data: telemetryData, isLoading: isLoadingTelemetry, isError: isErrorTelemetry } = useTelemetryLatest(plantId);
+  const latestValues = useTelemetryStore((s) => s.latestValues);
+
+  const telemetryData = useMemo(() => {
+    const data = Object.entries(latestValues).map(([tag_name, point]) => ({
+      tag_name,
+      value: point.value,
+      quality: point.quality,
+      ts: point.timestamp,
+      unit: point.unit || undefined
+    }));
+    return { data, count: data.length };
+  }, [latestValues]);
+
+  const isLoadingTelemetry = false;
+  const isErrorTelemetry = false;
+
   const { data: alarmsData } = useActiveAlarms(plantId);
 
-  const [activeTab, setActiveTab] = useState<'2d' | '3d'>('3d');
+  const [activeTab, setActiveTab] = useState<'2d' | '3d' | 'tags'>('3d');
 
   // Track previous values for micro-animations (flashing green/red on update)
   const [prevValues, setPrevValues] = useState<Record<string, number>>({});
@@ -61,7 +77,7 @@ export default function LivePlant() {
   // Calculate Data Quality dynamically
   const dataQuality = useMemo(() => {
     if (!telemetryData?.data || telemetryData.data.length === 0) return 100;
-    const goodPoints = telemetryData.data.filter(p => p.quality >= 192).length;
+    const goodPoints = telemetryData.data.filter(p => p.quality === 'GOOD').length;
     return (goodPoints / telemetryData.data.length) * 100;
   }, [telemetryData?.data]);
 
@@ -111,6 +127,17 @@ export default function LivePlant() {
           >
             <Activity className="w-4 h-4" />
             2D Cards
+          </button>
+          <button
+            onClick={() => setActiveTab('tags')}
+            className={`px-4 py-1.5 text-sm font-medium rounded-lg transition-colors flex items-center gap-2 ${
+              activeTab === 'tags'
+                ? 'bg-white text-slate-900 shadow-sm border border-slate-200/50'
+                : 'text-slate-500 hover:text-slate-700 hover:bg-white/50'
+            }`}
+          >
+            <Box className="w-4 h-4" />
+            Tag Browser
           </button>
         </div>
       </div>
@@ -164,6 +191,10 @@ export default function LivePlant() {
         <div className="mt-2 animate-in fade-in slide-in-from-bottom-4 duration-500">
           <Boiler3D telemetryData={(telemetryData?.data || []).map(d => ({ ...d, unit: d.unit || undefined }))} />
         </div>
+      ) : activeTab === 'tags' ? (
+        <div className="mt-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
+          <TagBrowser />
+        </div>
       ) : (
         <>
           <h2 className="text-lg font-bold text-slate-800 mt-4">Live Telemetry Streams</h2>
@@ -197,8 +228,8 @@ export default function LivePlant() {
                         {point.tag_name}
                       </span>
                       <div
-                        className={`w-2.5 h-2.5 rounded-full mt-0.5 flex-shrink-0 shadow-sm ${point.quality >= 192 ? 'bg-emerald-400 shadow-emerald-400/50' : 'bg-amber-400 shadow-amber-400/50 animate-pulse'}`}
-                        title={point.quality >= 192 ? "Quality: Good" : "Quality: Uncertain/Bad"}
+                        className={`w-2.5 h-2.5 rounded-full mt-0.5 flex-shrink-0 shadow-sm ${point.quality === 'GOOD' ? 'bg-emerald-400 shadow-emerald-400/50' : 'bg-amber-400 shadow-amber-400/50 animate-pulse'}`}
+                        title={point.quality === 'GOOD' ? "Quality: Good" : "Quality: Uncertain/Bad"}
                       />
                     </div>
                     <div className="mt-2 flex items-baseline gap-1.5">
