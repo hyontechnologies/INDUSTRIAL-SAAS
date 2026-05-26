@@ -15,6 +15,8 @@ import {
   WifiOff,
 } from 'lucide-react';
 import type { TelemetryLatest } from '../../shared/types';
+import { ScadaPanel } from '../../shared/components/scada/ScadaPanel';
+import { StatusIndicator } from '../../shared/components/scada/StatusIndicator';
 
 // ── KPI Card Component ──────────────────────────────────────────────────
 
@@ -28,39 +30,37 @@ interface KpiCardProps {
 }
 
 const KpiCard = memo(function KpiCard({ title, value, unit, icon, trend, severity = 'normal' }: KpiCardProps) {
-  const severityColors = {
-    normal: 'from-slate-800/50 to-slate-900/50 border-slate-700/50',
-    warning: 'from-amber-950/30 to-slate-900/50 border-amber-700/30',
-    critical: 'from-red-950/30 to-slate-900/50 border-red-700/30 animate-pulse',
-  };
+
 
   return (
-    <div className={cn(
-      'relative overflow-hidden rounded-xl border bg-gradient-to-br p-5 backdrop-blur-sm transition-all duration-300 hover:scale-[1.02] hover:shadow-lg hover:shadow-blue-500/5',
-      severityColors[severity]
-    )}>
+    <ScadaPanel title={title} className="hover:border-blue-500/50 transition-colors cursor-default">
       <div className="flex items-start justify-between">
-        <div className="space-y-2">
-          <p className="text-xs font-medium text-slate-400 uppercase tracking-wider">{title}</p>
+        <div className="space-y-1">
           <div className="flex items-baseline gap-1.5">
-            <span className="text-2xl font-bold tabular-nums text-slate-50">{value}</span>
-            {unit && <span className="text-sm text-slate-500">{unit}</span>}
+            <span className={cn(
+              "text-3xl font-bold tabular-nums tracking-tight",
+              severity === 'critical' ? 'text-scada-critical' : severity === 'warning' ? 'text-scada-warning' : 'text-slate-100'
+            )}>{value}</span>
+            {unit && <span className="text-sm font-semibold text-slate-500">{unit}</span>}
           </div>
         </div>
-        <div className="p-2.5 rounded-lg bg-slate-800/50">{icon}</div>
+        <div className="p-2 rounded bg-[#0a0f1c] border border-scada-border/50 shadow-inner">
+          {icon}
+        </div>
       </div>
       {trend && (
-        <div className="mt-3 flex items-center gap-1 text-xs">
-          {trend === 'up' && <TrendingUp className="w-3 h-3 text-emerald-400" />}
-          {trend === 'down' && <TrendingDown className="w-3 h-3 text-red-400" />}
-          <span className={trend === 'up' ? 'text-emerald-400' : trend === 'down' ? 'text-red-400' : 'text-slate-500'}>
-            {trend === 'stable' ? 'Stable' : trend === 'up' ? 'Rising' : 'Falling'}
-          </span>
+        <div className="mt-4 flex items-center justify-between border-t border-scada-border/50 pt-2">
+           <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider">
+             {trend === 'up' && <TrendingUp className="w-3 h-3 text-scada-good" />}
+             {trend === 'down' && <TrendingDown className="w-3 h-3 text-scada-critical" />}
+             <span className={trend === 'up' ? 'text-scada-good' : trend === 'down' ? 'text-scada-critical' : 'text-slate-500'}>
+               {trend === 'stable' ? 'Stable' : trend === 'up' ? 'Rising' : 'Falling'}
+             </span>
+           </div>
+           {severity === 'critical' && <StatusIndicator status="critical" />}
         </div>
       )}
-      {/* Subtle glow */}
-      <div className="absolute -top-12 -right-12 w-32 h-32 rounded-full bg-blue-500/5 blur-3xl" />
-    </div>
+    </ScadaPanel>
   );
 });
 
@@ -166,55 +166,66 @@ export default function DashboardPage() {
       {/* Telemetry Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
         {[
-          { label: 'Temperature', prefix: 'T', icon: <Thermometer className="w-4 h-4 text-orange-400" />, color: 'text-orange-400' },
-          { label: 'Pressure', prefix: 'P', icon: <Gauge className="w-4 h-4 text-cyan-400" />, color: 'text-cyan-400' },
-          { label: 'Level', prefix: 'L', icon: <Droplets className="w-4 h-4 text-blue-400" />, color: 'text-blue-400' },
-          { label: 'Flow', prefix: 'F', icon: <Wind className="w-4 h-4 text-teal-400" />, color: 'text-teal-400' },
-        ].map(({ label, prefix, icon, color }) => {
+          { label: 'Temperature', prefix: 'T', icon: <Thermometer className="w-3.5 h-3.5 text-orange-400" />, color: 'text-orange-400' },
+          { label: 'Pressure', prefix: 'P', icon: <Gauge className="w-3.5 h-3.5 text-cyan-400" />, color: 'text-cyan-400' },
+          { label: 'Level', prefix: 'L', icon: <Droplets className="w-3.5 h-3.5 text-blue-400" />, color: 'text-blue-400' },
+          { label: 'Flow', prefix: 'F', icon: <Wind className="w-3.5 h-3.5 text-teal-400" />, color: 'text-teal-400' },
+        ].map(({ label, prefix, icon }) => {
           const groupTags = tagList.filter((t) => t.tag_name.startsWith(prefix));
           return (
-            <div key={label} className="rounded-xl border border-slate-800/50 bg-slate-900/30 p-4 backdrop-blur-sm">
-              <div className="flex items-center gap-2 mb-3">
-                <div className="p-1.5 rounded-md bg-slate-800/50">{icon}</div>
-                <h3 className={cn('text-sm font-semibold', color)}>{label}</h3>
-                <span className="ml-auto text-xs text-slate-600">{groupTags.length} tags</span>
-              </div>
-              <div className="space-y-1.5">
-                {groupTags.slice(0, 4).map((tag) => (
-                  <div key={tag.tag_name} className="flex items-center justify-between text-xs">
-                    <span className="text-slate-400 font-mono truncate mr-2">{tag.tag_name}</span>
-                    <span className="text-slate-200 font-bold tabular-nums">
-                      {tag.value.toFixed(1)} {tag.unit || ''}
-                    </span>
-                  </div>
-                ))}
-                {groupTags.length > 4 && (
-                  <p className="text-[10px] text-slate-600 text-center mt-1">+{groupTags.length - 4} more</p>
+            <ScadaPanel
+              key={label}
+              title={label}
+              headerRight={
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[9px] font-bold text-slate-500">{groupTags.length} TAGS</span>
+                  {icon}
+                </div>
+              }
+            >
+              <div className="space-y-0.5">
+                {groupTags.slice(0, 5).map((tag) => {
+                  const isStale = tag.ts ? Date.now() - new Date(tag.ts).getTime() > 300000 : true;
+                  const status = tag.quality === 'GOOD' ? 'good' : tag.quality === 'UNCERTAIN' ? 'warning' : 'critical';
+                  return (
+                    <div key={tag.tag_name} className="flex items-center justify-between text-xs py-1.5 border-b border-scada-border/30 last:border-0 hover:bg-[#0a0f1c] px-1 rounded-sm cursor-pointer transition-colors">
+                      <div className="flex items-center gap-2 overflow-hidden mr-2">
+                        <StatusIndicator status={isStale ? 'stale' : status} className="flex-shrink-0 w-2 h-2" />
+                        <span className="text-slate-300 font-mono text-[10px] truncate">{tag.tag_name}</span>
+                      </div>
+                      <div className="flex items-baseline gap-1 flex-shrink-0">
+                        <span className={cn("font-bold tabular-nums", isStale ? "text-slate-500" : "text-emerald-400")}>
+                          {typeof tag.value === 'number' ? tag.value.toFixed(2) : tag.value}
+                        </span>
+                        <span className="text-[9px] text-slate-500 font-semibold">{tag.unit || ''}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+                {groupTags.length > 5 && (
+                  <button className="w-full mt-2 py-1.5 bg-[#0a0f1c] hover:bg-slate-800 border border-scada-border rounded-sm text-[9px] font-bold uppercase tracking-wider text-slate-400 transition-colors">
+                    View All {groupTags.length} {label} Tags
+                  </button>
                 )}
                 {groupTags.length === 0 && (
-                  <p className="text-xs text-slate-600 italic">No tags in this group</p>
+                  <p className="text-[10px] text-slate-600 italic text-center py-4">NO TAGS FOUND</p>
                 )}
               </div>
-            </div>
+            </ScadaPanel>
           );
         })}
       </div>
 
-      {/* Live Telemetry Table */}
-      <div className="rounded-xl border border-slate-800/50 bg-slate-900/20 backdrop-blur-sm overflow-hidden">
-        <div className="px-5 py-4 border-b border-slate-800/50 flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-slate-200">Live Telemetry</h2>
-          <span className="text-xs text-slate-600">{tagCount} tags</span>
-        </div>
+      <ScadaPanel title={`LIVE TELEMETRY (${tagCount} TAGS)`}>
         <div className="overflow-x-auto max-h-[400px] overflow-y-auto">
           <table className="w-full text-left">
-            <thead className="sticky top-0 bg-slate-900/90 backdrop-blur-sm">
-              <tr className="border-b border-slate-700/50">
-                <th className="py-2.5 px-4 text-xs font-semibold text-slate-400 uppercase tracking-wider">Tag</th>
-                <th className="py-2.5 px-4 text-xs font-semibold text-slate-400 uppercase tracking-wider text-right">Value</th>
-                <th className="py-2.5 px-4 text-xs font-semibold text-slate-400 uppercase tracking-wider text-center">Unit</th>
-                <th className="py-2.5 px-4 text-xs font-semibold text-slate-400 uppercase tracking-wider text-center">Quality</th>
-                <th className="py-2.5 px-4 text-xs font-semibold text-slate-400 uppercase tracking-wider text-right">Updated</th>
+            <thead className="sticky top-0 bg-[#0a0f1c] shadow-sm z-10">
+              <tr className="border-b border-scada-border">
+                <th className="py-2.5 px-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Tag Name</th>
+                <th className="py-2.5 px-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider text-right">Value</th>
+                <th className="py-2.5 px-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider text-center">Unit</th>
+                <th className="py-2.5 px-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider text-center">Quality</th>
+                <th className="py-2.5 px-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider text-right">Last Update</th>
               </tr>
             </thead>
             <tbody>
@@ -226,12 +237,12 @@ export default function DashboardPage() {
           {tagList.length === 0 && (
             <div className="py-16 text-center">
               <Activity className="w-10 h-10 text-slate-700 mx-auto mb-3" />
-              <p className="text-sm text-slate-500">No telemetry data yet</p>
-              <p className="text-xs text-slate-600 mt-1">Waiting for edge agent connection...</p>
+              <p className="text-sm font-bold text-slate-500 uppercase tracking-wider">No Telemetry Data</p>
+              <p className="text-xs text-slate-600 mt-1">Waiting for edge agent...</p>
             </div>
           )}
         </div>
-      </div>
+      </ScadaPanel>
     </div>
   );
 }

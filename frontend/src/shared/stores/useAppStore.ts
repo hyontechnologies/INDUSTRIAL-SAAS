@@ -120,6 +120,34 @@ export const useAppStore = create<AppStore>()(
           });
           break;
         }
+        case 'LATEST_UPDATE': {
+          interface LatestTelemetryPoint {
+            tag_name: string;
+            value: number;
+            quality: number;
+            ts: string;
+            unit: string | null;
+          }
+          interface LatestTelemetryUpdateMessage {
+            type: 'LATEST_UPDATE';
+            data: LatestTelemetryPoint[];
+          }
+          const update = msg as unknown as LatestTelemetryUpdateMessage;
+          set((state) => {
+            const merged = { ...state.latestValues };
+            for (const tag of update.data) {
+              merged[tag.tag_name] = {
+                tag_name: tag.tag_name,
+                value: tag.value,
+                quality: tag.quality >= 192 ? 'GOOD' : 'BAD',
+                ts: tag.ts,
+                unit: tag.unit,
+              };
+            }
+            return { latestValues: merged };
+          });
+          break;
+        }
         case 'alarm': {
           const alarmEvt = msg as WsAlarmEvent;
           const newAlarm: Alarm = {

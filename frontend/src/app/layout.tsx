@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+
 import { Outlet, NavLink } from 'react-router-dom';
 import {
   Activity,
@@ -17,17 +17,54 @@ import {
 } from 'lucide-react';
 import { useAppStore } from '../shared/stores/useAppStore';
 import { cn } from '../shared/utils/cn';
-import { useWebSocket } from '../shared/hooks/useWebSocket';
+import { useTelemetryPolling } from '../shared/hooks/useTelemetryPolling';
 
 const navItems = [
   { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/telemetry', icon: Activity, label: 'Telemetry' },
-  { to: '/alarms', icon: Bell, label: 'Alarms' },
   { to: '/historian', icon: History, label: 'Historian' },
-  { to: '/tags', icon: Tags, label: 'Tag Browser' },
+  { to: '/trends', icon: Activity, label: 'Trend Center' },
+  { to: '/reports', icon: Tags, label: 'Reports' },
+  { to: '/alarms', icon: Bell, label: 'Alarms' },
   { to: '/plants', icon: Factory, label: 'Plants' },
   { to: '/admin', icon: Settings, label: 'Admin' },
 ];
+
+function ProcessFooter() {
+  const latestValues = useAppStore(s => s.latestValues);
+
+  const footerTags = [
+    { label: 'MS TEMP', tag: 'TE-201', unit: '°C' },
+    { label: 'MS LINE PRS', tag: 'PT-202', unit: 'kg/cm2' },
+    { label: 'FURNACE DRAFT', tag: 'DT-301', unit: 'mmWc' },
+    { label: 'DRM LVL-1', tag: 'LT-201', unit: '%' },
+    { label: 'DEAERATOR LVL', tag: 'LT-001', unit: '%' },
+    { label: 'FW FLOW', tag: 'FT-101', unit: 'TPH' },
+    { label: 'MS FLOW', tag: 'FT-102', unit: 'TPH' },
+    { label: 'STEAM DRUM PRS', tag: 'PT-201', unit: 'kg/cm2' },
+  ];
+
+  return (
+    <div className="h-12 bg-[#0a0f1c] border-t border-scada-border flex items-center justify-between px-2 overflow-x-auto">
+      {footerTags.map(item => {
+        const val = latestValues[item.tag]?.value;
+        const q = latestValues[item.tag]?.quality;
+        const isGood = q === 'GOOD';
+        return (
+          <div key={item.label} className="flex flex-col items-center justify-center min-w-[120px] px-2 border-r border-scada-border/50 last:border-0 cursor-pointer hover:bg-slate-800/30 transition-colors">
+            <span className="text-[9px] font-bold text-slate-400 tracking-wider mb-0.5">{item.label}</span>
+            <div className="flex items-baseline gap-1">
+              <span className={cn("text-sm font-bold tabular-nums", isGood ? "text-slate-100" : "text-slate-500")}>
+                {val !== undefined ? Number(val).toFixed(1) : '---'}
+              </span>
+              <span className="text-[9px] text-slate-500">{item.unit}</span>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 function ConnectionBadge() {
   const status = useAppStore((s) => s.connectionStatus);
@@ -71,30 +108,16 @@ export function Layout() {
   const setSidebarCollapsed = useAppStore((s) => s.setSidebarCollapsed);
   const selectedPlantId = useAppStore((s) => s.selectedPlantId);
 
-  const user = useAppStore((s) => s.user);
+
   const handleWsMessage = useAppStore((s) => s.handleWsMessage);
   const setConnectionStatus = useAppStore((s) => s.setConnectionStatus);
 
-  const [wsTicket, setWsTicket] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!user) return;
-    fetch('/api/v1/ticket/ws', {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('industrial_auth_token')}` }
-    })
-    .then(r => r.json())
-    .then(d => setWsTicket(d.ticket))
-    .catch(err => console.error('Failed to get WS ticket', err));
-  }, [user]);
-
-  useWebSocket({
-    tenantId: user?.tenant_id || 'piccadily',
-    plantId: selectedPlantId || 'BOILER_PLC_01',
-    ticket: wsTicket ?? undefined,
+  useTelemetryPolling({
+    tenantId: 'piccadily',
+    plantId: selectedPlantId || 'PICCADILY_PLANT_01',
     onMessage: handleWsMessage,
     onStatusChange: setConnectionStatus,
-    enabled: !!user && !!wsTicket,
+    enabled: true,
   });
 
   return (
@@ -169,9 +192,12 @@ export function Layout() {
         </header>
 
         {/* Page Content */}
-        <main className="flex-1 overflow-auto bg-slate-950 p-6">
+        <main className="flex-1 overflow-auto bg-scada-bg p-4 md:p-6">
           <Outlet />
         </main>
+
+        {/* Sticky Process Footer */}
+        <ProcessFooter />
       </div>
     </div>
   );

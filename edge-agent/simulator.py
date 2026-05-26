@@ -76,7 +76,7 @@ async def main():
 
     # Create object hierarchy
     objects = server.nodes.objects
-    plant_node = await objects.add_folder(ns_idx, "BOILER_PLC_01")
+    plant_node = await objects.add_folder(ns_idx, "PICCADILY_PLANT_01")
     device_node = await plant_node.add_folder(ns_idx, "BOILER_PLC_01")
 
     nodes = []
@@ -92,7 +92,7 @@ async def main():
         await node.set_writable()
 
         # Add unit as description like edge_agent.py expects: "[Unit]"
-        await node.write_description(ua.LocalizedText(f"[{unit}]"))
+        await node.write_attribute(ua.AttributeIds.Description, ua.DataValue(ua.LocalizedText(f"[{unit}]")))
 
         nodes.append((node, config))
 
