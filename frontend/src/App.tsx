@@ -1,7 +1,6 @@
 import React, { useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore } from './stores/useAuthStore';
-import { useWorkspaceStore } from './stores/useWorkspaceStore';
 import { useUIStore } from './stores/useUIStore';
 
 // Layouts
@@ -43,7 +42,7 @@ function App() {
     if (user) {
       document.body.classList.add(`theme-${user.role}`);
     }
-  }, [theme, density, user?.role]);
+  }, [theme, density, user]);
 
   return (
     <Routes>

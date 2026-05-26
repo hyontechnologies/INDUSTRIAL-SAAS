@@ -1,10 +1,15 @@
 import { useQuery } from '@tanstack/react-query';
 import { fetchApi } from '../client';
+import { TelemetryPoint } from '../../types/telemetry';
 
 export interface HistoryQueryOptions {
   start_ts?: string;
   end_ts?: string;
   resolution?: '1min' | '5min' | '1hour' | '1day';
+}
+
+export interface HistoryResponse {
+  data: TelemetryPoint[];
 }
 
 export function useHistory(plantId?: string, tagName?: string, options?: HistoryQueryOptions) {
@@ -21,7 +26,7 @@ export function useHistory(plantId?: string, tagName?: string, options?: History
       if (options?.end_ts) params.append('end_ts', options.end_ts);
       if (options?.resolution) params.append('resolution', options.resolution);
 
-      return fetchApi<any>(`/telemetry/history?${params.toString()}`);
+      return fetchApi<HistoryResponse>(`/telemetry/history?${params.toString()}`);
     },
     enabled: !!plantId && !!tagName,
   });

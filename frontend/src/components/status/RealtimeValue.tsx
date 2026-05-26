@@ -21,12 +21,14 @@ export const RealtimeValue: React.FC<RealtimeValueProps> = ({
   const [flash, setFlash] = useState(false);
 
   useEffect(() => {
-    if (point) {
-      setFlash(true);
-      const timer = setTimeout(() => setFlash(false), 300);
-      return () => clearTimeout(timer);
-    }
-  }, [point?.value]);
+    if (!point) return;
+    const startTimer = setTimeout(() => setFlash(true), 0);
+    const endTimer = setTimeout(() => setFlash(false), 300);
+    return () => {
+      clearTimeout(startTimer);
+      clearTimeout(endTimer);
+    };
+  }, [point]);
 
   if (!point) return <span className="text-slate-400 font-mono">{fallback}</span>;
 

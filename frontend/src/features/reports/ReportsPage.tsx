@@ -13,10 +13,12 @@ const REPORT_LABELS: Record<string, string> = {
   'FT-101': 'Feed Water Flow',
 };
 
+type ReportDataRow = Record<string, string | number>;
+
 export default function ReportsPage() {
   const selectedPlantId = useAppStore(s => s.selectedPlantId) || 'PICCADILY_PLANT_01';
 
-  const [data, setData] = useState<any[]>([]);
+  const [data, setData] = useState<ReportDataRow[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
@@ -49,13 +51,13 @@ export default function ReportsPage() {
     loadData();
   }, [selectedPlantId]);
 
-  const columns = useMemo<ColumnDef<any, any>[]>(() => {
-    const cols: ColumnDef<any, any>[] = [
+  const columns = useMemo<ColumnDef<ReportDataRow, string | number | undefined>[]>(() => {
+    const cols: ColumnDef<ReportDataRow, string | number | undefined>[] = [
       {
         accessorKey: 'ts',
         header: 'TIMESTAMP',
         cell: (info) => {
-          const date = new Date(info.getValue());
+          const date = new Date(info.getValue() as string);
           return date.toLocaleString();
         }
       }

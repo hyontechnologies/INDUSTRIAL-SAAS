@@ -1,5 +1,5 @@
 import { useConnectionStore } from '../stores/useConnectionStore';
-import { useWebSocketActions } from './WebSocketProvider';
+import { useWebSocketActions } from './WebSocketContext';
 
 export function useWebSocket() {
   const status = useConnectionStore((state) => state.status);

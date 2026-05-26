@@ -6,13 +6,13 @@ import {
   type ColumnDef,
 } from '@tanstack/react-table';
 
-interface DailyReportTableProps {
-  data: any[];
-  columns: ColumnDef<any, any>[];
+interface DailyReportTableProps<TData, TValue> {
+  data: TData[];
+  columns: ColumnDef<TData, TValue>[];
   isLoading?: boolean;
 }
 
-export function DailyReportTable({ data, columns, isLoading }: DailyReportTableProps) {
+export function DailyReportTable<TData, TValue>({ data, columns, isLoading }: DailyReportTableProps<TData, TValue>) {
   const table = useReactTable({
     data,
     columns,

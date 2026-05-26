@@ -4,6 +4,7 @@ import { Wrench, AlertTriangle, CalendarClock } from 'lucide-react';
 
 export const MaintenanceMetrics: React.FC = () => {
   const { workOrders, equipmentHealth } = useMaintenanceStore();
+  const [now] = React.useState(() => Date.now());
 
   const openWorkOrders = workOrders.filter(wo => wo.status !== 'completed' && wo.status !== 'cancelled').length;
   const criticalEquipment = equipmentHealth.filter(eq => eq.status === 'critical').length;
@@ -11,7 +12,7 @@ export const MaintenanceMetrics: React.FC = () => {
   // Equipment with AI predicted failure in the next 7 days
   const upcomingFailures = equipmentHealth.filter(eq => {
     if (!eq.predictedFailureDate) return false;
-    const daysUntilFailure = (new Date(eq.predictedFailureDate).getTime() - Date.now()) / 86400000;
+    const daysUntilFailure = (new Date(eq.predictedFailureDate).getTime() - now) / 86400000;
     return daysUntilFailure > 0 && daysUntilFailure <= 7;
   }).length;
 

@@ -52,15 +52,28 @@ export function useTelemetryPolling({
   }, [tenantId, plantId, updateStatus]);
 
   useEffect(() => {
+    let active = true;
+    let startTimer: ReturnType<typeof setTimeout> | undefined;
+
     if (enabled && tenantId && plantId) {
-      updateStatus('connecting');
-      poll(); // initial fetch
+      startTimer = setTimeout(() => {
+        if (active) {
+          updateStatus('connecting');
+          poll();
+        }
+      }, 0);
       intervalRef.current = setInterval(poll, pollingInterval);
     } else {
-      updateStatus('disconnected');
+      startTimer = setTimeout(() => {
+        if (active) updateStatus('disconnected');
+      }, 0);
     }
 
     return () => {
+      active = false;
+      if (startTimer) {
+        clearTimeout(startTimer);
+      }
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
       }

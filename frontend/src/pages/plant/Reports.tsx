@@ -40,7 +40,10 @@ export default function Reports() {
   // Auto-select first tag if none selected
   React.useEffect(() => {
     if (tagsData?.tags?.length && !selectedTag) {
-      setSelectedTag(tagsData.tags[0].tag_name);
+      const timer = setTimeout(() => {
+        setSelectedTag(tagsData.tags[0].tag_name);
+      }, 0);
+      return () => clearTimeout(timer);
     }
   }, [tagsData?.tags, selectedTag]);
 

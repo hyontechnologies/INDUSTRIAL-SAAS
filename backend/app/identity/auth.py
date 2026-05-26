@@ -127,6 +127,38 @@ async def get_current_user(
             is_edge=True,
         )
 
+    if auth_header and auth_header.startswith("Bearer "):
+        token = auth_header.split(" ")[1]
+        try:
+            from jose import jwt
+
+            payload = jwt.decode(
+                token,
+                settings.SUPABASE_JWT_SECRET,
+                algorithms=[settings.JWT_ALGORITHM],
+                audience=settings.JWT_AUDIENCE,
+            )
+            user_id = payload.get("sub")
+            if not user_id:
+                raise HTTPException(status_code=401, detail="Invalid token payload: missing sub")
+
+            email = payload.get("email", "")
+            user_metadata = payload.get("user_metadata", {})
+            role = user_metadata.get("role") or payload.get("role") or "viewer"
+            tenant_id = user_metadata.get("tenant_id") or payload.get("tenant_id") or "piccadily"
+            plant_ids = user_metadata.get("plant_ids", [])
+
+            return UserContext(
+                user_id=user_id,
+                tenant_id=tenant_id,
+                email=email,
+                role=role,
+                is_edge=False,
+                plant_ids=plant_ids,
+            )
+        except Exception as e:
+            raise HTTPException(status_code=401, detail=f"Invalid or expired JWT: {str(e)}")
+
     # Bypass auth for frontend by returning a dummy admin user
     return UserContext(
         user_id="frontend-dummy-user",

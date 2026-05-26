@@ -121,7 +121,18 @@ export const useAppStore = create<AppStore>()(
           break;
         }
         case 'LATEST_UPDATE': {
-          const update = msg as any; // Type for latest update
+          interface LatestTelemetryPoint {
+            tag_name: string;
+            value: number;
+            quality: number;
+            ts: string;
+            unit: string | null;
+          }
+          interface LatestTelemetryUpdateMessage {
+            type: 'LATEST_UPDATE';
+            data: LatestTelemetryPoint[];
+          }
+          const update = msg as LatestTelemetryUpdateMessage;
           set((state) => {
             const merged = { ...state.latestValues };
             for (const tag of update.data) {

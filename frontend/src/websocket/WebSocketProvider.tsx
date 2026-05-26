@@ -1,15 +1,9 @@
-import React, { createContext, useContext, useEffect, useRef } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { SocketManager } from './SocketManager';
 import { ConnectionStateManager } from './ConnectionStateManager';
 import { useWorkspaceStore } from '../stores/useWorkspaceStore';
 import { useAuthStore } from '../stores/useAuthStore';
-
-interface WebSocketContextValue {
-  reconnect: () => void;
-  disconnect: () => void;
-}
-
-const WebSocketContext = createContext<WebSocketContextValue | null>(null);
+import { WebSocketContext, WebSocketContextValue } from './WebSocketContext';
 
 export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const socketManager = useRef(new SocketManager());
@@ -19,8 +13,9 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const { token } = useAuthStore();
 
   useEffect(() => {
-    stateManager.current.start();
-    return () => stateManager.current.stop();
+    const currentStateManager = stateManager.current;
+    currentStateManager.start();
+    return () => currentStateManager.stop();
   }, []);
 
   useEffect(() => {
@@ -53,12 +48,4 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       {children}
     </WebSocketContext.Provider>
   );
-};
-
-export const useWebSocketActions = () => {
-  const context = useContext(WebSocketContext);
-  if (!context) {
-    throw new Error('useWebSocketActions must be used within a WebSocketProvider');
-  }
-  return context;
 };

@@ -4,7 +4,7 @@ import { Cpu, Server, GitBranch, CreditCard, Radio, Brain, Settings, Building2, 
 export function SkeletonPage({ title, description, icon: Icon }: {
   title: string;
   description?: string;
-  icon?: any;
+  icon?: React.ComponentType<{ className?: string }>;
 }) {
   const features = [
     'Real-time monitoring dashboard',

@@ -7,6 +7,12 @@ import { PermissionGate } from '../guards/PermissionGate';
 
 export const AlarmTable: React.FC = () => {
   const alarms = useAlarmStore(state => state.activeAlarms);
+  const [now, setNow] = React.useState(() => Date.now());
+
+  React.useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 10000);
+    return () => clearInterval(timer);
+  }, []);
 
   if (alarms.length === 0) {
     return (
@@ -66,7 +72,7 @@ export const AlarmTable: React.FC = () => {
                 </td>
                 <td className="p-3">
                   <div className="flex flex-col">
-                    <span className="text-sm text-slate-700">{formatDuration(Date.now() - new Date(alarm.occurred_at).getTime())}</span>
+                    <span className="text-sm text-slate-700">{formatDuration(now - new Date(alarm.occurred_at).getTime())}</span>
                     <span className="text-[10px] text-slate-400">{formatTimestamp(alarm.occurred_at)}</span>
                   </div>
                 </td>

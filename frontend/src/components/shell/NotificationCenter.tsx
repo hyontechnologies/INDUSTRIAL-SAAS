@@ -8,6 +8,18 @@ export const NotificationCenter: React.FC = () => {
   const { notificationDrawerOpen, setNotificationDrawerOpen } = useUIStore();
   const { notifications, unreadCount, markRead, markAllRead, clearAll } = useNotificationStore();
   const drawerRef = useRef<HTMLDivElement>(null);
+  const [now, setNow] = React.useState(() => Date.now());
+
+  useEffect(() => {
+    if (notificationDrawerOpen) {
+      const startTimer = setTimeout(() => setNow(Date.now()), 0);
+      const timer = setInterval(() => setNow(Date.now()), 10000);
+      return () => {
+        clearTimeout(startTimer);
+        clearInterval(timer);
+      };
+    }
+  }, [notificationDrawerOpen]);
 
   // Close on outside click
   useEffect(() => {
@@ -105,7 +117,7 @@ export const NotificationCenter: React.FC = () => {
                         {notif.message}
                       </p>
                       <p className="text-[10px] text-slate-400 mt-2 font-medium">
-                        {formatDuration(Date.now() - new Date(notif.timestamp).getTime())}
+                        {formatDuration(now - new Date(notif.timestamp).getTime())}
                       </p>
                     </div>
                     {!notif.read && (

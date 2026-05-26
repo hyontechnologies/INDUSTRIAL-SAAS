@@ -44,7 +44,10 @@ export default function Trends() {
   // Auto-select first tag if none selected and tags loaded
   React.useEffect(() => {
     if (tagsData?.tags?.length && selectedTags.length === 0) {
-      setSelectedTags([tagsData.tags[0].tag_name]);
+      const timer = setTimeout(() => {
+        setSelectedTags([tagsData.tags[0].tag_name]);
+      }, 0);
+      return () => clearTimeout(timer);
     }
   }, [tagsData?.tags, selectedTags.length]);
 

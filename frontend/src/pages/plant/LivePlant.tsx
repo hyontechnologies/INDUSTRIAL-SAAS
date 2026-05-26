@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { Activity, AlertTriangle, Cpu, TrendingUp, AlertCircle, Box } from 'lucide-react';
 import { useTelemetryLatest } from '../../api/hooks/useTelemetry';
@@ -12,25 +12,21 @@ export default function LivePlant() {
 
   const [activeTab, setActiveTab] = useState<'2d' | '3d'>('3d');
 
-  // Track previous values for micro-animations (flashing green/red on update)
-  const [prevValues, setPrevValues] = useState<Record<string, number>>({});
-  const [flashTags, setFlashTags] = useState<Record<string, 'up' | 'down'>>({});
+  // Track previous values and update times with Refs to prevent dependency tracking issues and cascading renders
+  const prevValuesRef = useRef<Record<string, number>>({});
+  const lastUpdateTimeRef = useRef<number | null>(null);
 
-  // Track update rate
-  const [lastUpdateTime, setLastUpdateTime] = useState<number>(Date.now());
+  const [flashTags, setFlashTags] = useState<Record<string, 'up' | 'down'>>({});
   const [updateRateMs, setUpdateRateMs] = useState<number>(0);
 
   useEffect(() => {
     if (telemetryData?.data) {
       const now = Date.now();
-      if (lastUpdateTime) {
-        // Average with previous rate to smooth it out a bit
-        const currentDiff = now - lastUpdateTime;
-        setUpdateRateMs(prev => prev === 0 ? currentDiff : (prev * 0.7 + currentDiff * 0.3));
-      }
-      setLastUpdateTime(now);
+      const lastUpdateTime = lastUpdateTimeRef.current ?? now;
+      const currentDiff = now - lastUpdateTime;
 
       const newFlash: Record<string, 'up' | 'down'> = {};
+      const prevValues = prevValuesRef.current;
       const newPrev = { ...prevValues };
 
       telemetryData.data.forEach(point => {
@@ -44,26 +40,38 @@ export default function LivePlant() {
         newPrev[point.tag_name] = point.value;
       });
 
-      setPrevValues(newPrev);
-      setFlashTags(newFlash);
+      lastUpdateTimeRef.current = now;
+      prevValuesRef.current = newPrev;
+
+      // Defer state updates to prevent cascading renders
+      const timerId = setTimeout(() => {
+        setUpdateRateMs(prev => prev === 0 ? currentDiff : (prev * 0.7 + currentDiff * 0.3));
+        setFlashTags(newFlash);
+      }, 0);
 
       // Clear flash after 1 second
       if (Object.keys(newFlash).length > 0) {
-        const timer = setTimeout(() => setFlashTags({}), 1000);
-        return () => clearTimeout(timer);
+        const clearTimer = setTimeout(() => setFlashTags({}), 1000);
+        return () => {
+          clearTimeout(timerId);
+          clearTimeout(clearTimer);
+        };
       }
+      return () => clearTimeout(timerId);
     }
   }, [telemetryData?.data]);
 
   const criticalAlarms = alarmsData?.alarms.filter(a => a.severity === 'CRITICAL').length || 0;
   const activeTagsCount = telemetryData?.count || 0;
 
+  const telemetryPoints = telemetryData?.data;
+
   // Calculate Data Quality dynamically
   const dataQuality = useMemo(() => {
-    if (!telemetryData?.data || telemetryData.data.length === 0) return 100;
-    const goodPoints = telemetryData.data.filter(p => p.quality >= 192).length;
-    return (goodPoints / telemetryData.data.length) * 100;
-  }, [telemetryData?.data]);
+    if (!telemetryPoints || telemetryPoints.length === 0) return 100;
+    const goodPoints = telemetryPoints.filter(p => p.quality >= 192).length;
+    return (goodPoints / telemetryPoints.length) * 100;
+  }, [telemetryPoints]);
 
   // Format update rate
   const formattedUpdateRate = useMemo(() => {

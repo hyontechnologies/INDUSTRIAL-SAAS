@@ -4,6 +4,7 @@ import { Search, Command, ArrowRight } from 'lucide-react';
 import { useUIStore } from '../../stores/useUIStore';
 import { useWorkspaceStore } from '../../stores/useWorkspaceStore';
 import { ALL_NAV_ITEMS } from '../../constants/navigation';
+import { Plant } from '../../types/tenant';
 
 export const CommandPalette: React.FC = () => {
   const { commandPaletteOpen, setCommandPaletteOpen } = useUIStore();
@@ -45,7 +46,7 @@ export const CommandPalette: React.FC = () => {
     setCommandPaletteOpen(false);
   };
 
-  const handlePlantSelect = (plant: any) => {
+  const handlePlantSelect = (plant: Plant) => {
     setPlant(plant);
     navigate(`/plants/${plant.id}/live`);
     setCommandPaletteOpen(false);

@@ -9,7 +9,7 @@ export interface SystemMessage {
   data: {
     event: string;
     message: string;
-    [key: string]: any;
+    [key: string]: unknown;
   };
 }
 

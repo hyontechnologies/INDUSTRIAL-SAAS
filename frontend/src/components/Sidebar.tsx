@@ -55,7 +55,7 @@ export default function Sidebar() {
 
             <nav className="space-y-0.5 px-3">
               {items.map((item) => {
-                const IconComponent = (Icons as any)[item.icon];
+                const IconComponent = (Icons as Record<string, React.ComponentType<{ className?: string }>>)[item.icon];
 
                 return (
                   <NavLink

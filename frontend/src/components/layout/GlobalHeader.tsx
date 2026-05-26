@@ -2,7 +2,6 @@ import React from 'react';
 import { Menu, Search, Bell, Shield, User } from 'lucide-react';
 import { useWorkspaceStore } from '../../stores/useWorkspaceStore';
 import { useAuthStore } from '../../stores/useAuthStore';
-import { useUIStore } from '../../stores/useUIStore';
 
 export const GlobalHeader: React.FC = () => {
   const { workspace, toggleSidebar } = useWorkspaceStore();

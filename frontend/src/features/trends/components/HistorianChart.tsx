@@ -12,7 +12,7 @@ import {
 
 export interface HistorianDataPoint {
   ts: string; // ISO string
-  [tagName: string]: any; // tag values
+  [tagName: string]: string | number | boolean | null | undefined; // tag values
 }
 
 interface HistorianChartProps {

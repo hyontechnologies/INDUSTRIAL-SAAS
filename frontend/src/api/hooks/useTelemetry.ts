@@ -29,7 +29,7 @@ export interface MultiHistoryResponse {
   tags: string[];
   interval: string;
   count: number;
-  data: any[]; // Pivot data {ts: string, [tag_name]: value}
+  data: Record<string, string | number>[]; // Pivot data {ts: string, [tag_name]: value}
 }
 
 export function useTelemetryMultiHistory(plantId?: string, tags: string[] = [], start?: string, end?: string, interval = '5m') {
