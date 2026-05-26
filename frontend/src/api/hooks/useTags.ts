@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { fetchApi } from '../client';
-import { TagMetadata } from '../../types/telemetry';
+import type { TagMetadata } from '../../types/telemetry';
 
 export interface TagsResponse {
   count: number;

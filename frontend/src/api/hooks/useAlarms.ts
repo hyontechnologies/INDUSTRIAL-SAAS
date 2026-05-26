@@ -1,6 +1,6 @@
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { fetchApi } from '../client';
-import { Alarm } from '../../types/alarm';
+import type { Alarm } from '../../types/alarm';
 import { queryClient } from '../queryClient';
 
 export interface AlarmsResponse {

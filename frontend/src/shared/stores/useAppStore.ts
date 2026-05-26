@@ -132,14 +132,14 @@ export const useAppStore = create<AppStore>()(
             type: 'LATEST_UPDATE';
             data: LatestTelemetryPoint[];
           }
-          const update = msg as LatestTelemetryUpdateMessage;
+          const update = msg as unknown as LatestTelemetryUpdateMessage;
           set((state) => {
             const merged = { ...state.latestValues };
             for (const tag of update.data) {
               merged[tag.tag_name] = {
                 tag_name: tag.tag_name,
                 value: tag.value,
-                quality: tag.quality,
+                quality: tag.quality >= 192 ? 'GOOD' : 'BAD',
                 ts: tag.ts,
                 unit: tag.unit,
               };

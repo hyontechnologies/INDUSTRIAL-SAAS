@@ -1,5 +1,5 @@
 import React, { useRef, useMemo } from 'react';
-import { Canvas, useFrame } from '@react-three/fiber';
+import { Canvas, useFrame, RootState } from '@react-three/fiber';
 import { OrbitControls, Environment, ContactShadows, Html } from '@react-three/drei';
 import * as THREE from 'three';
 
@@ -22,7 +22,7 @@ const BoilerModel: React.FC<{ telemetry: Record<string, number> }> = ({ telemetr
   const furnaceColor = new THREE.Color().setHSL(0.05, 1, Math.min(0.9, furnaceTemp / 1200));
   const drumColor = new THREE.Color().setHSL(0.6, 0.8, 0.2 + (drumLevel / 200));
 
-  useFrame(({ clock }) => {
+  useFrame(({ clock }: RootState) => {
     // Animate flow in pipes or slight vibrations based on pressure
     if (furnaceRef.current) {
       // Slight glow/pulse

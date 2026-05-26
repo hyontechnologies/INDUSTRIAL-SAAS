@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { fetchApi } from '../client';
-import { TelemetryPoint } from '../../types/telemetry';
+import type { TelemetryPoint } from '../../types/telemetry';
 
 export interface HistoryQueryOptions {
   start_ts?: string;

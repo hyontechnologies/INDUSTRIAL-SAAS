@@ -23,7 +23,7 @@ export function useTelemetryPolling({
   const [status, setStatus] = useState<ConnectionStatus>('disconnected');
   const onMessageRef = useRef(onMessage);
   const onStatusRef = useRef(onStatusChange);
-  const intervalRef = useRef<ReturnType<typeof setInterval>>();
+  const intervalRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
 
   useEffect(() => { onMessageRef.current = onMessage; }, [onMessage]);
   useEffect(() => { onStatusRef.current = onStatusChange; }, [onStatusChange]);

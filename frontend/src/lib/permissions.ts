@@ -1,4 +1,4 @@
-import { UserProfile, Permission, RolePermissionMap } from '../types/auth';
+import type { UserProfile, Permission, RolePermissionMap } from '../types/auth';
 
 export const ROLE_PERMISSIONS: RolePermissionMap = {
   super_admin: ['alarms:acknowledge', 'alarms:clear', 'telemetry:view', 'tags:manage', 'devices:manage', 'agents:manage', 'users:manage', 'billing:view'],
@@ -19,6 +19,7 @@ export function hasPermission(user: UserProfile | null, permission: Permission):
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 export function hasPlantAccess(user: UserProfile | null, plantId: string): boolean {
   if (!user) return false;
+  void plantId;
   // In a real app, this would check if the user is mapped to the plant's org/plant group
   // For MVP, we assume global access for all users
   return true;
@@ -27,6 +28,7 @@ export function hasPlantAccess(user: UserProfile | null, plantId: string): boole
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 export function canAccessRoute(user: UserProfile | null, path: string): boolean {
   if (!user) return false;
+  void path;
   // In a real app, complex route path checking here
   return true;
 }
